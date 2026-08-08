@@ -121,8 +121,10 @@ app.get('/api/me', (req, res) => {
 // Telegram Web App (botdagi tugma orqali) - avtomatik kirish
 app.post('/api/auth/webapp', async (req, res) => {
   try {
+    const hasInitData = !!req.body.initData;
     const user = verifyWebAppData(req.body.initData, BOT_TOKEN);
     if (!user) {
+      console.warn(`[webapp-auth] rad etildi (initData=${hasInitData ? 'bor' : 'yoq'}, token=${BOT_TOKEN ? 'bor' : 'YOQ'})`);
       return res.status(400).json({ error: 'Telegram ma\'lumotlari tasdiqlanmadi' });
     }
 
@@ -134,6 +136,7 @@ app.post('/api/auth/webapp', async (req, res) => {
       photo_url: user.photo_url || null,
     });
     const membership = await checkChannelMembership(BOT_TOKEN, CHANNEL_USERNAME, user.id);
+    console.log(`[webapp-auth] OK user=${user.id} isMember=${membership.isMember} status=${membership.status}`);
 
     req.session.user = {
       id: stored.id,

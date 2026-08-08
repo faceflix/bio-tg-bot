@@ -415,7 +415,17 @@ async function refreshMembership() {
 }
 
 /* ---------------- Web App (avtomatik kirish) ---------------- */
+function isWebAppContext() {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('tgWebAppPlatform')) return true;
+  if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) return true;
+  return false;
+}
+
 function getWebAppInitData() {
+  if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
+    return window.Telegram.WebApp.initData;
+  }
   const params = new URLSearchParams(window.location.search);
   const d = params.get('tgWebAppData');
   if (d) return d;
@@ -425,7 +435,7 @@ function getWebAppInitData() {
 
 async function tryWebAppLogin() {
   const initData = getWebAppInitData();
-  if (!initData) return false;
+  if (!initData) return { attempted: false };
   try {
     const res = await API.post('/api/auth/webapp', { initData });
     state.user = res.user;
@@ -439,9 +449,9 @@ async function tryWebAppLogin() {
       $('joinHint').textContent = res.error || '';
       showView('view-join');
     }
-    return true;
+    return { attempted: true, ok: true };
   } catch (e) {
-    return false;
+    return { attempted: true, ok: false, error: e.message };
   }
 }
 
@@ -502,9 +512,16 @@ async function init() {
   }
 
   const webAppLogged = await tryWebAppLogin();
-  if (!webAppLogged) {
+  if (!webAppLogged.attempted) {
     showView('view-login');
     loadTelegramWidget();
+  } else if (!webAppLogged.ok) {
+    showView('view-login');
+    $('tgWidget').innerHTML =
+      '<p style="color:var(--danger);font-size:13px;line-height:1.5">Avtomatik kirish amalga oshmadi' +
+      (webAppLogged.error ? ': ' + webAppLogged.error : '') +
+      '</p>' +
+      (isWebAppContext() ? '<p style="color:var(--text-muted);font-size:12px;margin-top:8px">Botdagi "🌐 Sayt" tugmasini qayta bosib ko\'ring.</p>' : '');
   }
 }
 
