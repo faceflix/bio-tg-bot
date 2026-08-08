@@ -414,6 +414,37 @@ async function refreshMembership() {
   }
 }
 
+/* ---------------- Web App (avtomatik kirish) ---------------- */
+function getWebAppInitData() {
+  const params = new URLSearchParams(window.location.search);
+  const d = params.get('tgWebAppData');
+  if (d) return d;
+  if (params.get('hash')) return window.location.search.replace(/^\?/, '');
+  return null;
+}
+
+async function tryWebAppLogin() {
+  const initData = getWebAppInitData();
+  if (!initData) return false;
+  try {
+    const res = await API.post('/api/auth/webapp', { initData });
+    state.user = res.user;
+    state.isMember = res.isMember;
+    renderHeader();
+    if (res.isMember) {
+      showView('view-app');
+      loadTests();
+    } else {
+      $('channelName').textContent = '@' + String(state.config.channelUsername).replace('@', '');
+      $('joinHint').textContent = res.error || '';
+      showView('view-join');
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 /* ---------------- Init ---------------- */
 async function init() {
   initTheme();
@@ -423,6 +454,12 @@ async function init() {
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
   $('joinChannelBtn').addEventListener('click', () => { window.open(state.config.channelUrl, '_blank'); });
   $('recheckBtn').addEventListener('click', refreshMembership);
+
+  if (window.Telegram && window.Telegram.WebApp) {
+    window.Telegram.WebApp.ready();
+    window.Telegram.WebApp.expand();
+    window.Telegram.WebApp.disableVerticalSwipes && window.Telegram.WebApp.disableVerticalSwipes();
+  }
 
   $('testModal').addEventListener('click', (e) => {
     if (e.target.id === 'closeTest') { closeModal(); return; }
@@ -459,7 +496,13 @@ async function init() {
     } else {
       showView('view-join');
     }
+    return;
   } catch (e) {
+    /* sessiya yo'q - davom etamiz */
+  }
+
+  const webAppLogged = await tryWebAppLogin();
+  if (!webAppLogged) {
     showView('view-login');
     loadTelegramWidget();
   }

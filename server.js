@@ -4,7 +4,7 @@ const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
 
-const { verifyLoginData, checkChannelMembership } = require('./lib/telegram');
+const { verifyLoginData, checkChannelMembership, verifyWebAppData } = require('./lib/telegram');
 const store = require('./lib/store');
 
 const app = express();
@@ -116,6 +116,45 @@ app.post('/api/auth', async (req, res) => {
 app.get('/api/me', (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Kirilmagan' });
   res.json({ user: req.session.user, isMember: !!req.session.isMember });
+});
+
+// Telegram Web App (botdagi tugma orqali) - avtomatik kirish
+app.post('/api/auth/webapp', async (req, res) => {
+  try {
+    const user = verifyWebAppData(req.body.initData, BOT_TOKEN);
+    if (!user) {
+      return res.status(400).json({ error: 'Telegram ma\'lumotlari tasdiqlanmadi' });
+    }
+
+    const stored = await store.upsertUser({
+      id: user.id,
+      first_name: user.first_name || '',
+      last_name: user.last_name || null,
+      username: user.username || null,
+      photo_url: user.photo_url || null,
+    });
+    const membership = await checkChannelMembership(BOT_TOKEN, CHANNEL_USERNAME, user.id);
+
+    req.session.user = {
+      id: stored.id,
+      username: stored.username,
+      firstName: stored.firstName,
+      lastName: stored.lastName,
+      photoUrl: stored.photoUrl,
+    };
+    req.session.isMember = membership.isMember;
+    await new Promise((resolve) => req.session.save(resolve));
+
+    res.json({
+      user: req.session.user,
+      isMember: membership.isMember,
+      status: membership.status,
+      error: membership.error,
+    });
+  } catch (e) {
+    console.error('webapp auth error:', e);
+    res.status(500).json({ error: 'Server xatosi' });
+  }
 });
 
 app.post('/api/logout', (req, res) => {
