@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="uz" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BioTest — Biologiya testlari</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧬</text></svg>" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand" id="brand">
+        <span class="brand-icon">🧬</span>
+        <span class="brand-name">BioTest</span>
+      </div>
+
+      <div class="header-right">
+        <div class="user-chip" id="userChip" hidden>
+          <img id="userAvatar" alt="" />
+          <span id="userName"></span>
+        </div>
+        <button class="icon-btn" id="themeToggle" title="Mavzuni almashtirish" aria-label="Mavzuni almashtirish"></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+
+    <!-- LOGIN VIEW -->
+    <section id="view-login" class="view">
+      <div class="auth-card">
+        <div class="auth-icon">🧬</div>
+        <h1>BioTest</h1>
+        <p class="auth-subtitle">Biologiya fanidan testlarni yeching va bilimingizni sinang</p>
+        <div class="auth-features">
+          <span>📊 Natijalar tahlili</span>
+          <span>🏆 Reyting</span>
+          <span>🌗 Tungi rejim</span>
+        </div>
+        <div class="tg-widget" id="tgWidget"></div>
+        <p class="auth-note">Kirish faqat Telegram orqali amalga oshiriladi</p>
+      </div>
+    </section>
+
+    <!-- JOIN CHANNEL VIEW -->
+    <section id="view-join" class="view" hidden>
+      <div class="auth-card">
+        <div class="auth-icon">📢</div>
+        <h1>Kanalga a'zo bo'ling</h1>
+        <p class="auth-subtitle">Testlardan foydalanish uchun avval <strong id="channelName">kanalimizga</strong> a'zo bo'ling</p>
+        <button class="btn btn-primary btn-block" id="joinChannelBtn">📢 Kanalga qo'shilish</button>
+        <button class="btn btn-outline btn-block" id="recheckBtn">✅ A'zo bo'ldim — tekshirish</button>
+        <p class="auth-note" id="joinHint"></p>
+      </div>
+    </section>
+
+    <!-- APP VIEW -->
+    <section id="view-app" class="view" hidden>
+
+      <nav class="tabs">
+        <button class="tab active" data-tab="tests">📚 Testlar</button>
+        <button class="tab" data-tab="stats">📊 Statistika</button>
+        <button class="tab" data-tab="leaderboard">🏆 Reyting</button>
+      </nav>
+
+      <div id="tab-tests" class="tab-panel active">
+        <div class="tests-grid" id="testsGrid"></div>
+      </div>
+
+      <div id="tab-stats" class="tab-panel">
+        <div id="statsContent"></div>
+      </div>
+
+      <div id="tab-leaderboard" class="tab-panel">
+        <div id="leaderboardContent"></div>
+      </div>
+
+    </section>
+
+    <footer class="app-footer">
+      <span>BioTest © 2026</span>
+    </footer>
+  </main>
+
+  <!-- TEST MODAL -->
+  <div id="testModal" class="modal-overlay" hidden>
+    <div class="modal" id="testModalBody"></div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
