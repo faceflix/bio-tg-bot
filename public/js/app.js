@@ -252,14 +252,12 @@ function bindTestHandlers() {
   if (prev) prev.addEventListener('click', () => {
     state.currentIndex--;
     openModal(renderTestQuestion());
-    bindTestHandlers();
   });
 
   const next = $('nextBtn');
   if (next) next.addEventListener('click', () => {
     state.currentIndex++;
     openModal(renderTestQuestion());
-    bindTestHandlers();
   });
 
   const submit = $('submitBtn');
