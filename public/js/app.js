@@ -41,7 +41,41 @@ const state = {
   answers: [],
   result: null,
   editingTestId: null,
+  testEndsAt: null,
 };
+
+let timerInterval = null;
+
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function startTimer() {
+  stopTimer();
+  if (!state.currentTest || !state.currentTest.duration || !state.testEndsAt) return;
+  timerInterval = setInterval(() => {
+    const remain = Math.max(0, Math.floor((state.testEndsAt - Date.now()) / 1000));
+    const el = $('testTimer');
+    if (el) {
+      el.textContent = '⏱ ' + fmtTime(remain);
+      el.classList.toggle('low', remain <= 60 && remain > 0);
+      el.classList.toggle('times-up', remain <= 0);
+    }
+    if (remain <= 0) {
+      stopTimer();
+      if (!$('testModal').hidden) {
+        toast('Vaqt tugadi — test yakunlandi');
+        submitTest();
+      }
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -192,7 +226,9 @@ async function startTest(testId) {
     state.currentIndex = 0;
     state.answers = new Array(test.questions.length).fill(null);
     state.result = null;
+    state.testEndsAt = test.duration ? Date.now() + test.duration * 60 * 1000 : null;
     openModal(renderTestQuestion());
+    startTimer();
   } catch (e) {
     if (e.message.includes('a\'zo') || e.message.includes('kir')) {
       toast('Bu test uchun a\'zolik kerak. Qayta tekshirib ko\'ring.');
@@ -209,6 +245,7 @@ function openModal(html) {
   document.body.style.overflow = 'hidden';
 }
 function closeModal() {
+  stopTimer();
   $('testModal').hidden = true;
   document.body.style.overflow = '';
 }
@@ -238,7 +275,11 @@ function renderTestQuestion() {
     '</div>';
 
   return (
-    '<div class="modal-header"><h2>📚 ' + t.title + '</h2><button class="close-btn" id="closeTest">✕</button></div>' +
+    '<div class="modal-header"><h2>📚 ' + t.title + '</h2>' +
+      (t.duration && state.testEndsAt
+        ? '<div class="test-timer" id="testTimer">⏱ ' + fmtTime(Math.max(0, Math.floor((state.testEndsAt - Date.now()) / 1000))) + '</div>'
+        : '') +
+      '<button class="close-btn" id="closeTest">✕</button></div>' +
     '<div class="modal-body">' +
       '<div class="progress-row">' +
         '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
@@ -285,6 +326,7 @@ function bindTestHandlers() {
 
 /* ---------------- Submit & result ---------------- */
 async function submitTest() {
+  stopTimer();
   const t = state.currentTest;
   try {
     const res = await API.post('/api/tests/' + t.id + '/submit', { answers: state.answers });
@@ -636,10 +678,12 @@ function emptyQuestions(n) {
 function renderEditorQuestions(questions) {
   return questions.map((q, i) => {
     const correctBtns = LETTERS.map((L, ci) =>
-      '<button type="button" class="correct-btn' + (q.correct === ci ? ' active' : '') + '" data-idx="' + i + '" data-opt="' + ci + '">' + L + '</button>'
+      '<button type="button" class="correct-btn' + (q.correct === ci ? ' active' : '') + '" data-opt="' + ci + '">' + L + '</button>'
     ).join('');
-    return '<div class="q-block" data-qidx="' + i + '">' +
-      '<div class="q-block-head"><span>Savol ' + (i + 1) + '</span><span class="q-expl">To\'g\'ri javobni tanlang</span></div>' +
+    return '<div class="q-block">' +
+      '<div class="q-block-head"><span class="q-num">Savol ' + (i + 1) + '</span>' +
+        '<span class="q-block-actions"><span class="q-expl">To\'g\'ri javobni tanlang</span>' +
+        '<button type="button" class="q-del" title="Savolni o\'chirish">🗑</button></span></div>' +
       '<textarea class="edit-q" placeholder="Savol matni..." rows="2">' + q.q + '</textarea>' +
       '<div class="q-options">' + LETTERS.map((L, oi) =>
         '<input class="edit-opt" data-opt="' + oi + '" placeholder="' + L + ') variant" value="' + (q.options[oi] || '').replace(/"/g, '&quot;') + '" />'
@@ -648,6 +692,12 @@ function renderEditorQuestions(questions) {
       '<input class="edit-expl" placeholder="Izoh (ixtiyoriy)" value="' + (q.explanation || '').replace(/"/g, '&quot;') + '" />' +
     '</div>';
   }).join('');
+}
+
+function renumberEditor() {
+  document.querySelectorAll('#testModalBody .q-block .q-num').forEach((el, i) => {
+    el.textContent = 'Savol ' + (i + 1);
+  });
 }
 
 function collectEditorQuestions() {
@@ -662,7 +712,7 @@ function collectEditorQuestions() {
 
 function openTestEditor(test) {
   const isEdit = !!test;
-  const questions = isEdit ? test.questions : emptyQuestions(20);
+  const questions = isEdit ? test.questions : emptyQuestions(3);
   state.editingTestId = isEdit ? test.id : null;
 
   openModal(
@@ -674,7 +724,7 @@ function openTestEditor(test) {
         '<div class="form-field"><label>Belgi (emoji)</label><input id="editIcon" value="' + (test ? test.icon : '📝') + '" /></div>' +
         '<div class="form-field"><label>Daqiqa (ixtiyoriy)</label><input id="editDuration" type="number" min="0" value="' + (test && test.duration ? test.duration : '') + '" placeholder="20" /></div>' +
       '</div>' +
-      '<h3 style="font-size:15px;margin:8px 0">Savollar (' + questions.length + ')</h3>' +
+      '<h3 style="font-size:15px;margin:8px 0" id="editorQuestionsHead">Savollar (' + questions.length + ')</h3>' +
       '<div id="editorQuestions">' + renderEditorQuestions(questions) + '</div>' +
       '<div class="btn-row">' +
         '<button class="btn btn-outline" id="addQuestionBtn">➕ Savol qo\'shish</button>' +
@@ -686,6 +736,7 @@ function openTestEditor(test) {
 
 function addQuestionToEditor() {
   $('editorQuestions').insertAdjacentHTML('beforeend', renderEditorQuestions(emptyQuestions(1)));
+  renumberEditor();
   $('editorQuestions').scrollIntoView({ block: 'end', behavior: 'smooth' });
 }
 
@@ -751,12 +802,21 @@ async function init() {
     }
     if (e.target.id === 'saveTestBtn') { saveTestFromEditor(); return; }
     if (e.target.id === 'addQuestionBtn') { addQuestionToEditor(); return; }
+    const del = e.target.closest('.q-del');
+    if (del) {
+      const blocks = document.querySelectorAll('#testModalBody .q-block');
+      if (blocks.length <= 1) { toast('Kamida bitta savol qolishi kerak'); return; }
+      del.closest('.q-block').remove();
+      renumberEditor();
+      $('editorQuestionsHead').textContent = 'Savollar (' + (blocks.length - 1) + ')';
+      return;
+    }
     const cb = e.target.closest('.correct-btn');
     if (cb) {
-      const qidx = cb.dataset.idx;
-      document.querySelectorAll('#testModalBody .q-block[data-qidx="' + qidx + '"] .correct-btn').forEach((b) => b.classList.remove('active'));
+      const block = cb.closest('.q-block');
+      block.querySelectorAll('.correct-btn').forEach((b) => b.classList.remove('active'));
       cb.classList.add('active');
-      document.querySelector('#testModalBody .q-block[data-qidx="' + qidx + '"]').dataset.correct = cb.dataset.opt;
+      block.dataset.correct = cb.dataset.opt;
       return;
     }
     if (e.target === $('testModal')) closeModal();
