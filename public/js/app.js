@@ -493,6 +493,21 @@ async function init() {
     return;
   }
 
+  // Telegram Web App orqali ochilganda HAR DOIM joriy hisobni qayta tekshiramiz.
+  // Bu ikkita Telegram hisobi bo'lgan qurilmada muhim: eski sessiya yangi hisobni bloklamasligi kerak.
+  if (getWebAppInitData()) {
+    const webAppLogged = await tryWebAppLogin();
+    if (webAppLogged.ok) return;
+    showView('view-login');
+    $('tgWidget').innerHTML =
+      '<p style="color:var(--danger);font-size:13px;line-height:1.5">Avtomatik kirish amalga oshmadi' +
+      (webAppLogged.error ? ': ' + webAppLogged.error : '') +
+      '</p>' +
+      '<p style="color:var(--text-muted);font-size:12px;margin-top:8px">Botdagi "🌐 Sayt" tugmasini qayta bosib ko\'ring.</p>';
+    return;
+  }
+
+  // Web App emas (oddiy brauzer): mavjud sessiya yoki Login Widget
   try {
     const me = await API.get('/api/me');
     state.user = me.user;
@@ -504,22 +519,9 @@ async function init() {
     } else {
       showView('view-join');
     }
-    return;
   } catch (e) {
-    /* sessiya yo'q - davom etamiz */
-  }
-
-  const webAppLogged = await tryWebAppLogin();
-  if (!webAppLogged.attempted) {
     showView('view-login');
     loadTelegramWidget();
-  } else if (!webAppLogged.ok) {
-    showView('view-login');
-    $('tgWidget').innerHTML =
-      '<p style="color:var(--danger);font-size:13px;line-height:1.5">Avtomatik kirish amalga oshmadi' +
-      (webAppLogged.error ? ': ' + webAppLogged.error : '') +
-      '</p>' +
-      (isWebAppContext() ? '<p style="color:var(--text-muted);font-size:12px;margin-top:8px">Botdagi "🌐 Sayt" tugmasini qayta bosib ko\'ring.</p>' : '');
   }
 }
 
