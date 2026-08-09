@@ -221,6 +221,7 @@ async function loadTests() {
 /* ---------------- Test runner ---------------- */
 async function startTest(testId) {
   try {
+    clearDraft();
     const test = await API.get('/api/tests/' + testId);
     state.currentTest = test;
     state.currentIndex = 0;
@@ -325,6 +326,7 @@ function bindTestHandlers() {
       const allAnswered = state.answers.every((a) => a !== null);
       const sb = $('submitBtn');
       if (sb && allAnswered) sb.disabled = false;
+      saveDraft();
     });
   });
 
@@ -332,12 +334,14 @@ function bindTestHandlers() {
   if (prev) prev.addEventListener('click', () => {
     state.currentIndex--;
     openModal(renderTestQuestion());
+    saveDraft();
   });
 
   const next = $('nextBtn');
   if (next) next.addEventListener('click', () => {
     state.currentIndex++;
     openModal(renderTestQuestion());
+    saveDraft();
   });
 
   const submit = $('submitBtn');
@@ -350,6 +354,7 @@ async function submitTest() {
   const t = state.currentTest;
   try {
     const res = await API.post('/api/tests/' + t.id + '/submit', { answers: state.answers });
+    clearDraft();
     state.result = res;
     openModal(renderResult());
   } catch (e) {
@@ -372,6 +377,76 @@ async function sendObjection() {
   } catch (e) {
     toast('Xato: ' + e.message);
   }
+}
+
+/* ---------------- Test holatini saqlash (uzilsa davom etish) ---------------- */
+const DRAFT_KEY = 'bioTestDraft';
+const DRAFT_GRACE = 5 * 60 * 1000;
+
+function saveDraft() {
+  if (!state.currentTest) return;
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      userId: state.user ? state.user.id : null,
+      testId: state.currentTest.id,
+      currentIndex: state.currentIndex,
+      answers: state.answers,
+      endsAt: state.testEndsAt,
+      leftAt: Date.now(),
+    }));
+  } catch (e) { /* ignore */ }
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
+}
+
+async function resumeTest() {
+  let raw = null;
+  try { raw = localStorage.getItem(DRAFT_KEY); } catch (e) { return; }
+  if (!raw) return;
+  let draft = null;
+  try { draft = JSON.parse(raw); } catch (e) { clearDraft(); return; }
+  if (draft.userId && state.user && draft.userId !== state.user.id) { clearDraft(); return; }
+
+  const now = Date.now();
+  const five = draft.leftAt + DRAFT_GRACE;
+  const deadline = draft.endsAt ? Math.min(draft.endsAt, five) : five;
+
+  let test;
+  try {
+    test = await API.get('/api/tests/' + draft.testId);
+  } catch (e) {
+    clearDraft();
+    return;
+  }
+  if (!Array.isArray(draft.answers) || draft.answers.length !== test.questions.length) { clearDraft(); return; }
+
+  state.currentTest = test;
+  state.answers = draft.answers;
+  state.currentIndex = draft.currentIndex || 0;
+  state.result = null;
+
+  if (now >= deadline) {
+    clearDraft();
+    state.testEndsAt = null;
+    showView('view-app');
+    loadTests();
+    toast('Vaqt tugashi sababli test avtomatik yakunlandi');
+    try {
+      const res = await API.post('/api/tests/' + test.id + '/submit', { answers: state.answers });
+      state.result = res;
+      openModal(renderResult());
+    } catch (e) {
+      toast('Natija saqlanmadi: ' + e.message);
+    }
+    return;
+  }
+
+  state.testEndsAt = draft.endsAt;
+  openModal(renderTestQuestion());
+  startTimer();
+  toast('Testdan uzilgansiz — davom etyapsiz' + (state.testEndsAt ? ' ⏱ ' + fmtTime(Math.max(0, Math.floor((state.testEndsAt - now) / 1000))) : ''));
 }
 
 function gradeColor(percent) {
@@ -502,6 +577,7 @@ async function refreshMembership() {
       showView('view-app');
       loadTests();
       toast('A\'zolik tasdiqlandi! ✅');
+      resumeTest();
     } else {
       toast('Hali a\'zo emassiz. Kanalga qo\'shiling.');
     }
@@ -545,6 +621,7 @@ async function tryWebAppLogin() {
       $('joinHint').textContent = res.error || '';
       showView('view-join');
     }
+    resumeTest();
     return { attempted: true, ok: true };
   } catch (e) {
     return { attempted: true, ok: false, error: e.message };
@@ -884,7 +961,7 @@ async function init() {
   }
 
   $('testModal').addEventListener('click', (e) => {
-    if (e.target.id === 'closeTest') { closeModal(); return; }
+    if (e.target.id === 'closeTest') { clearDraft(); closeModal(); return; }
     if (e.target.id === 'restartBtn') { startTest(state.currentTest.id); return; }
     if (e.target.id === 'analysisBtn') {
       $('analysisBlock').hidden = false;
@@ -911,6 +988,7 @@ async function init() {
     if (qnav) {
       state.currentIndex = Number(qnav.dataset.nav);
       openModal(renderTestQuestion());
+      saveDraft();
       return;
     }
     const imgAdd = e.target.closest('.q-img-add');
@@ -1005,6 +1083,7 @@ async function init() {
     if (me.isMember) {
       showView('view-app');
       loadTests();
+      resumeTest();
     } else {
       showView('view-join');
     }

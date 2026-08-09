@@ -364,6 +364,19 @@ body {
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-block { width: 100%; margin-top: 10px; }
 
+/* ---------- Ustoz hero ---------- */
+.home-hero {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--primary), #2a9d8f);
+  color: #fff;
+}
+.home-hero-icon { font-size: 28px; }
+.home-hero-name { font-size: 16px; font-weight: 800; }
+.home-hero-sub { font-size: 12px; opacity: 0.9; margin-top: 2px; }
+
 /* ---------- Tabs ---------- */
 .tabs {
   display: flex; gap: 8px;
