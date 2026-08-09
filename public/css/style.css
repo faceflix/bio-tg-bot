@@ -232,6 +232,32 @@ body {
   border: 1px solid var(--border);
   object-fit: contain;
 }
+
+.objection-wrap { margin-top: 16px; }
+.objection-btn { font-size: 12px; color: var(--text-muted); }
+.objection-form {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.objection-form textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+.objection-form textarea:focus { outline: none; border-color: var(--primary); }
+
+.obj-question { font-weight: 700; font-size: 12px; margin-bottom: 4px; }
+.obj-message { font-size: 13px; color: var(--text); white-space: pre-wrap; }
 .q-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .q-correct-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; color: var(--text-muted); }
 .correct-btn {

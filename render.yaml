@@ -23,5 +23,7 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
+      - key: FEEDBACK_CHAT_ID
+        sync: false
       - key: DEV_AUTH
         value: "0"

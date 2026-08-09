@@ -289,6 +289,16 @@ function renderTestQuestion() {
       '<div class="q-text">' + q.q + '</div>' +
       (q.image ? '<img class="test-q-img" src="' + q.image + '" alt="rasm" />' : '') +
       '<div class="options">' + opts + '</div>' +
+      '<div class="objection-wrap">' +
+        '<button type="button" class="btn btn-outline btn-sm objection-btn" id="objectionBtn">⚠️ E\'tiroz</button>' +
+        '<div class="objection-form" id="objectionForm" hidden>' +
+          '<textarea id="objectionText" placeholder="Savolda xato yoki muammo bo\'lsa yozing..." rows="2" maxlength="1000"></textarea>' +
+          '<div class="btn-row">' +
+            '<button class="btn btn-outline btn-sm" id="objectionCancel">Bekor</button>' +
+            '<button class="btn btn-primary btn-sm" id="objectionSend">Yuborish</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
       btnRow +
     '</div>'
   );
@@ -335,6 +345,23 @@ async function submitTest() {
     openModal(renderResult());
   } catch (e) {
     toast('Natija saqlanmadi: ' + e.message);
+  }
+}
+
+async function sendObjection() {
+  const t = state.currentTest;
+  const message = $('objectionText').value.trim();
+  if (!message) { toast('E\'tiroz matnini yozing'); return; }
+  try {
+    await API.post('/api/tests/' + t.id + '/objection', {
+      questionIndex: state.currentIndex,
+      message,
+    });
+    $('objectionForm').hidden = true;
+    $('objectionText').value = '';
+    toast('E\'tiroz yuborildi, rahmat!');
+  } catch (e) {
+    toast('Xato: ' + e.message);
   }
 }
 
@@ -567,6 +594,7 @@ async function adminLogout() {
 async function loadAdminData() {
   loadAdminResults();
   loadAdminTests();
+  loadAdminObjections();
 }
 
 /* ---- Natijalar ---- */
@@ -658,6 +686,49 @@ async function loadAdminTests() {
     });
   } catch (e) {
     $('adminTests').innerHTML = '<p class="admin-empty">Xato: ' + e.message + '</p>';
+  }
+}
+
+/* ---- E'tirozlar ---- */
+async function loadAdminObjections() {
+  try {
+    const objections = await API.get('/api/admin/objections');
+    const rows = objections.length
+      ? objections.map((o) => {
+          const str = o.message.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const qstr = o.question.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          return '<tr>' +
+            '<td><strong>' + o.name + '</strong>' + (o.username ? '<div class="rank-meta">@' + o.username + '</div>' : '') + '</td>' +
+            '<td>' + o.testId + '</td>' +
+            '<td>' + (o.questionIndex + 1) + '</td>' +
+            '<td><div class="obj-question">' + qstr + '</div><div class="obj-message">' + str + '</div></td>' +
+            '<td>' + new Date(o.createdAt).toLocaleString('uz') + '</td>' +
+            '<td><button class="btn btn-danger btn-sm" data-odel="' + o.id + '">🗑</button></td>' +
+          '</tr>';
+        }).join('')
+      : '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">E\'tirozlar yo\'q</td></tr>';
+
+    $('adminObjections').innerHTML =
+      '<div class="panel">' +
+        '<div class="admin-bar" style="margin-bottom:12px">' +
+          '<h3>⚠️ E\'tirozlar (' + objections.length + ')</h3>' +
+        '</div>' +
+        '<div class="table-wrap"><table><thead><tr><th>Foydalanuvchi</th><th>Test</th><th>Savol</th><th>Xabar</th><th>Sana</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '</div>';
+
+    document.querySelectorAll('[data-odel]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const o = objections.find((x) => x.id === b.dataset.odel);
+        if (o && !confirm('E\'tirozni o\'chirasizmi?')) return;
+        try {
+          await API.delete('/api/admin/objections/' + b.dataset.odel);
+          loadAdminObjections();
+          toast('E\'tiroz o\'chirildi');
+        } catch (e) { toast('Xato: ' + e.message); }
+      });
+    });
+  } catch (e) {
+    $('adminObjections').innerHTML = '<p class="admin-empty">Xato: ' + e.message + '</p>';
   }
 }
 
@@ -813,6 +884,20 @@ async function init() {
     }
     if (e.target.id === 'saveTestBtn') { saveTestFromEditor(); return; }
     if (e.target.id === 'addQuestionBtn') { addQuestionToEditor(); return; }
+    if (e.target.id === 'objectionBtn') {
+      $('objectionForm').hidden = false;
+      $('objectionText').focus();
+      return;
+    }
+    if (e.target.id === 'objectionCancel') {
+      $('objectionForm').hidden = true;
+      $('objectionText').value = '';
+      return;
+    }
+    if (e.target.id === 'objectionSend') {
+      sendObjection();
+      return;
+    }
     const imgAdd = e.target.closest('.q-img-add');
     if (imgAdd) {
       imgAdd.closest('.q-block').querySelector('.q-img-file').click();

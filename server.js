@@ -4,7 +4,7 @@ const session = require('express-session');
 const path = require('path');
 const crypto = require('crypto');
 
-const { verifyLoginData, checkChannelMembership, verifyWebAppData } = require('./lib/telegram');
+const { verifyLoginData, checkChannelMembership, verifyWebAppData, sendMessage } = require('./lib/telegram');
 const store = require('./lib/store');
 
 const app = express();
@@ -15,6 +15,7 @@ const BOT_USERNAME = process.env.BOT_USERNAME || '';
 const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
 const CHANNEL_URL = process.env.CHANNEL_URL || `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const FEEDBACK_CHAT_ID = process.env.FEEDBACK_CHAT_ID || '';
 
 function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -411,6 +412,63 @@ app.post('/api/tests/:id/submit', requireAuth, async (req, res) => {
     wrongCount: total - score,
     analysis,
   });
+});
+
+// E'tiroz yuborish (savoldagi xato yoki muammo haqida)
+app.post('/api/tests/:id/objection', requireAuth, async (req, res) => {
+  if (!req.session.isMember) {
+    return res.status(403).json({ error: 'Kanalga a\'zo bo\'lishingiz kerak' });
+  }
+  const test = await getTestById(req.params.id);
+  if (!test) return res.status(404).json({ error: 'Test topilmadi' });
+
+  const { questionIndex, message } = req.body || {};
+  const qi = Number(questionIndex);
+  const msg = String(message || '').trim();
+  if (!Number.isInteger(qi) || qi < 0 || qi >= test.questions.length) {
+    return res.status(400).json({ error: 'Savol raqami noto\'g\'ri' });
+  }
+  if (!msg) return res.status(400).json({ error: 'E\'tiroz matni kerak' });
+  if (msg.length > 1000) return res.status(400).json({ error: 'Xabar 1000 belgidan oshmasin' });
+
+  const question = String(test.questions[qi].q || '').slice(0, 200);
+  const ob = await store.addObjection({
+    userId: req.session.user.id,
+    testId: test.id,
+    questionIndex: qi,
+    question,
+    message: msg,
+  });
+
+  if (FEEDBACK_CHAT_ID && BOT_TOKEN) {
+    const user = req.session.user;
+    const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Foydalanuvchi';
+    const link = user.username ? '@' + String(user.username).replace(/^@/, '') : 'id ' + user.id;
+    const text =
+      '<b>⚠️ E\'tiroz</b>\n' +
+      '<b>📚 ' + test.title + '</b>\n' +
+      '<b>❓ Savol ' + (qi + 1) + '</b>: ' + question + '\n' +
+      '📝 ' + msg + '\n' +
+      '👤 ' + name + ' (' + link + ')';
+    try {
+      await sendMessage(BOT_TOKEN, FEEDBACK_CHAT_ID, text);
+    } catch (e) {
+      console.error('E\'tirozni Telegramga yuborishda xato:', e.message);
+    }
+  }
+
+  res.json({ ok: true, id: ob.id });
+});
+
+// Admin: e'tirozlar ro'yxati
+app.get('/api/admin/objections', requireAdmin, async (req, res) => {
+  res.json(await store.getObjections());
+});
+
+// Admin: e'tirozni o'chirish
+app.delete('/api/admin/objections/:id', requireAdmin, async (req, res) => {
+  await store.deleteObjection(req.params.id);
+  res.json({ ok: true });
 });
 
 // Foydalanuvchining statistikasi
