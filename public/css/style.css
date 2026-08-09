@@ -101,10 +101,141 @@ body {
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 .app-footer {
+  position: relative;
   text-align: center;
   padding: 18px;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.admin-trigger {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.admin-trigger:hover { color: var(--text); border-color: var(--primary); transform: translateY(-50%) scale(1.08); }
+
+/* ---------- Admin panel ---------- */
+.admin-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.admin-bar h2 { font-size: 20px; }
+.admin-bar-actions { display: flex; gap: 8px; }
+.btn-sm { padding: 8px 14px; font-size: 13px; }
+
+.admin-empty { text-align: center; color: var(--text-muted); padding: 30px 0; }
+
+.admin-pass-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  margin-top: 8px;
+}
+.admin-pass-input:focus { outline: none; border-color: var(--primary); }
+
+.admin-select {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* ---------- Test editor ---------- */
+.editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.editor-grid .full { grid-column: 1 / -1; }
+
+.form-field label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 5px; }
+.form-field input, .form-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+.form-field textarea { min-height: 64px; resize: vertical; }
+.form-field input:focus, .form-field textarea:focus { outline: none; border-color: var(--primary); }
+
+.q-block {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+  background: var(--surface);
+}
+.q-block-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 800; color: var(--primary);
+  margin-bottom: 10px;
+}
+.q-block textarea, .q-block input {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  margin-bottom: 8px;
+}
+.q-block textarea:focus, .q-block input:focus { outline: none; border-color: var(--primary); }
+.q-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.q-correct-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; color: var(--text-muted); }
+.correct-btn {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-weight: 800; font-size: 13px;
+  cursor: pointer;
+}
+.correct-btn.active { background: var(--success); border-color: var(--success); color: #fff; }
+.q-expl { font-size: 12px; color: var(--text-muted); }
+
+.edit-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.edit-actions .btn { flex: 1; min-width: 120px; }
+
+.test-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+.test-row .t-icon { font-size: 26px; }
+.test-row .t-info { flex: 1; }
+.test-row .t-title { font-weight: 700; font-size: 15px; }
+.test-row .t-meta { font-size: 12px; color: var(--text-muted); }
+.test-row .btn-sm { min-width: 74px; }
+
+@media (max-width: 560px) {
+  .editor-grid { grid-template-columns: 1fr; }
+  .q-options { grid-template-columns: 1fr; }
 }
 
 /* ---------- Auth ---------- */

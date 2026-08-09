@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
-const fs = require('fs');
+const crypto = require('crypto');
 
 const { verifyLoginData, checkChannelMembership, verifyWebAppData } = require('./lib/telegram');
 const store = require('./lib/store');
@@ -14,16 +14,21 @@ const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const BOT_USERNAME = process.env.BOT_USERNAME || '';
 const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
 const CHANNEL_URL = process.env.CHANNEL_URL || `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
-const TESTS_FILE = path.join(__dirname, 'data', 'tests.json');
-let testsCache = null;
-function getTests() {
-  if (testsCache) return testsCache;
-  testsCache = JSON.parse(fs.readFileSync(TESTS_FILE, 'utf8'));
-  return testsCache;
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ha = crypto.createHash('sha256').update(a).digest();
+  const hb = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(ha, hb);
 }
-function getTestById(id) {
-  return getTests().find((t) => t.id === id) || null;
+
+// Testlar endi bazadan o'qiladi (admin yaratgan testlar ham shu yerda)
+async function getTests() {
+  return store.getTests();
+}
+async function getTestById(id) {
+  return store.getTestById(id);
 }
 
 app.use(express.json({ limit: '1mb' }));
@@ -44,6 +49,150 @@ function requireAuth(req, res, next) {
   }
   next();
 }
+
+function requireAdmin(req, res, next) {
+  if (!req.session.isAdmin) {
+    return res.status(401).json({ error: 'Avval parol kiriting' });
+  }
+  next();
+}
+
+// ---------------- O'QITUVCHI (ADMIN) PANELI ----------------
+app.post('/api/admin/login', (req, res) => {
+  if (!ADMIN_PASSWORD) {
+    return res.status(500).json({ error: 'ADMIN_PASSWORD sozlanmagan' });
+  }
+  const password = (req.body || {}).password;
+  if (!safeEqual(password, ADMIN_PASSWORD)) {
+    return res.status(401).json({ error: 'Parol noto\'g\'ri' });
+  }
+  req.session.isAdmin = true;
+  req.session.save(() => res.json({ ok: true }));
+});
+
+app.post('/api/admin/logout', requireAdmin, (req, res) => {
+  req.session.isAdmin = false;
+  req.session.save(() => res.json({ ok: true }));
+});
+
+app.get('/api/admin/me', (req, res) => {
+  res.json({ isAdmin: !!req.session.isAdmin });
+});
+
+// Barcha natijalar (foydalanuvchi ma'lumotlari bilan)
+app.get('/api/admin/results', requireAdmin, async (req, res) => {
+  const [attempts, users, tests] = await Promise.all([
+    store.getAllAttempts(),
+    store.getUsers(),
+    store.getTests(),
+  ]);
+  const testTitle = {};
+  for (const t of tests) testTitle[t.id] = t.title;
+  const enriched = attempts
+    .map((a) => {
+      const u = users[String(a.userId)] || {};
+      return {
+        id: a.id,
+        userId: a.userId,
+        name: u.firstName || u.username || String(a.userId),
+        username: u.username || null,
+        photoUrl: u.photoUrl || null,
+        testId: a.testId,
+        testTitle: testTitle[a.testId] || a.testId,
+        score: a.score,
+        total: a.total,
+        percent: a.percent,
+        date: a.createdAt,
+        answers: a.answers,
+      };
+    })
+    .sort((x, y) => new Date(y.date) - new Date(x.date));
+  res.json(enriched);
+});
+
+// Testlar ro'yxati (boshqaruv uchun, savollarsiz)
+app.get('/api/admin/tests', requireAdmin, async (req, res) => {
+  const tests = await store.getTests();
+  res.json(
+    tests.map((t) => ({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      icon: t.icon,
+      duration: t.duration,
+      questionCount: t.questions.length,
+      builtIn: t.builtIn,
+    }))
+  );
+});
+
+function validateTestPayload(body) {
+  const { title, description, icon, duration, questions } = body || {};
+  if (!title || !String(title).trim()) return { error: 'Test nomi kerak' };
+  if (!Array.isArray(questions) || questions.length === 0) return { error: 'Kamida bitta savol kerak' };
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i] || {};
+    if (!q.q || !String(q.q).trim()) return { error: `${i + 1}-savol matni bo'sh` };
+    if (!Array.isArray(q.options) || q.options.length !== 4 || q.options.some((o) => !String(o || '').trim())) {
+      return { error: `${i + 1}-savolda 4 ta to'liq variant bo'lishi kerak` };
+    }
+    if (!Number.isInteger(q.correct) || q.correct < 0 || q.correct > 3) {
+      return { error: `${i + 1}-savolning to'g'ri javobi noto'g'ri` };
+    }
+  }
+  return {
+    data: {
+      title: String(title).trim(),
+      description: String(description || '').trim(),
+      icon: String(icon || '📝').trim(),
+      duration: Number(duration) || null,
+      questions: questions.map((q) => ({
+        q: String(q.q).trim(),
+        options: q.options.map((o) => String(o).trim()),
+        correct: q.correct,
+        explanation: String(q.explanation || '').trim(),
+      })),
+    },
+  };
+}
+
+// To'liq test (savollari bilan) - tahrirlash uchun
+app.get('/api/admin/tests/:id/full', requireAdmin, async (req, res) => {
+  const test = await store.getTestById(req.params.id);
+  if (!test) return res.status(404).json({ error: 'Test topilmadi' });
+  res.json({
+    id: test.id,
+    title: test.title,
+    description: test.description,
+    icon: test.icon,
+    duration: test.duration,
+    builtIn: test.builtIn,
+    questions: test.questions,
+  });
+});
+
+app.post('/api/admin/tests', requireAdmin, async (req, res) => {
+  const v = validateTestPayload(req.body);
+  if (v.error) return res.status(400).json({ error: v.error });
+  const created = await store.createTest(v.data);
+  res.json({ ok: true, id: created.id, title: created.title, questionCount: created.questions.length });
+});
+
+app.put('/api/admin/tests/:id', requireAdmin, async (req, res) => {
+  const v = validateTestPayload(req.body);
+  if (v.error) return res.status(400).json({ error: v.error });
+  const updated = await store.updateTest(req.params.id, v.data);
+  if (!updated) return res.status(404).json({ error: 'Test topilmadi' });
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/tests/:id', requireAdmin, async (req, res) => {
+  const test = await store.getTestById(req.params.id);
+  if (!test) return res.status(404).json({ error: 'Test topilmadi' });
+  if (test.builtIn) return res.status(400).json({ error: 'Standart testlarni o\'chirib bo\'lmaydi' });
+  await store.deleteTest(req.params.id);
+  res.json({ ok: true });
+});
 
 app.get('/api/config', (req, res) => {
   res.json({
@@ -173,8 +322,8 @@ app.post('/api/verify-membership', requireAuth, async (req, res) => {
 });
 
 // Testlar ro'yxati (a'zo bo'lmasa ham ko'rinadi, lekin ishlatib bo'lmaydi)
-app.get('/api/tests', (req, res) => {
-  const list = getTests().map((t) => ({
+app.get('/api/tests', async (req, res) => {
+  const list = (await getTests()).map((t) => ({
     id: t.id,
     title: t.title,
     description: t.description,
@@ -186,11 +335,11 @@ app.get('/api/tests', (req, res) => {
 });
 
 // Test savollari - faqat a'zo uchun
-app.get('/api/tests/:id', requireAuth, (req, res) => {
+app.get('/api/tests/:id', requireAuth, async (req, res) => {
   if (!req.session.isMember) {
     return res.status(403).json({ error: 'Kanalga a\'zo bo\'lishingiz kerak' });
   }
-  const test = getTestById(req.params.id);
+  const test = await getTestById(req.params.id);
   if (!test) return res.status(404).json({ error: 'Test topilmadi' });
 
   res.json({
@@ -211,7 +360,7 @@ app.post('/api/tests/:id/submit', requireAuth, async (req, res) => {
   if (!req.session.isMember) {
     return res.status(403).json({ error: 'Kanalga a\'zo bo\'lishingiz kerak' });
   }
-  const test = getTestById(req.params.id);
+  const test = await getTestById(req.params.id);
   if (!test) return res.status(404).json({ error: 'Test topilmadi' });
 
   const answers = req.body.answers;
@@ -264,7 +413,7 @@ app.post('/api/tests/:id/submit', requireAuth, async (req, res) => {
 // Foydalanuvchining statistikasi
 app.get('/api/stats', requireAuth, async (req, res) => {
   const attempts = await store.getUserAttempts(req.session.user.id);
-  const tests = getTests();
+  const tests = await getTests();
   const testMap = {};
   for (const t of tests) testMap[t.id] = t.title;
 

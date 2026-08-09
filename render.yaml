@@ -21,5 +21,7 @@ services:
         sync: false
       - key: DATABASE_AUTH_TOKEN
         sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: DEV_AUTH
         value: "0"

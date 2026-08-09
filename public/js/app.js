@@ -16,6 +16,20 @@ const API = {
     if (!res.ok) throw new Error((await res.json()).error || 'Xatolik');
     return res.json();
   },
+  put: async (url, body) => {
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Xatolik');
+    return res.json();
+  },
+  delete: async (url) => {
+    const res = await fetch(url, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error || 'Xatolik');
+    return res.json();
+  },
 };
 
 const state = {
@@ -26,6 +40,7 @@ const state = {
   currentIndex: 0,
   answers: [],
   result: null,
+  editingTestId: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -66,13 +81,17 @@ function toast(msg, ms = 2600) {
 
 /* ---------------- Views ---------------- */
 function showView(name) {
-  ['view-login', 'view-join', 'view-app'].forEach((v) => { $(v).hidden = v !== name; });
+  ['view-login', 'view-join', 'view-app', 'view-admin'].forEach((v) => { $(v).hidden = v !== name; });
 }
 function showTab(name) {
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + name));
   if (name === 'stats') loadStats();
   if (name === 'leaderboard') loadLeaderboard();
+}
+function showAdminTab(name) {
+  document.querySelectorAll('[data-atab]').forEach((t) => t.classList.toggle('active', t.dataset.atab === name));
+  document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === 'atab-' + name));
 }
 
 /* ---------------- Telegram auth ---------------- */
@@ -453,6 +472,254 @@ async function tryWebAppLogin() {
   }
 }
 
+/* ---------------- O'qituvchi (Admin) paneli ---------------- */
+let adminTestsCache = [];
+
+async function openAdminPanel() {
+  try {
+    const me = await API.get('/api/admin/me');
+    if (me.isAdmin) {
+      showView('view-admin');
+      loadAdminData();
+      return;
+    }
+  } catch (e) { /* sessiya yo'q - parol so'raymiz */ }
+  openAdminPassword();
+}
+
+function openAdminPassword() {
+  openModal(
+    '<div class="modal-header"><h2>🔒 O\'qituvchi paneli</h2><button class="close-btn" id="closeTest">✕</button></div>' +
+    '<div class="modal-body">' +
+      '<p class="auth-note" style="margin-top:0;text-align:left">Panelga kirish uchun parolni kiriting:</p>' +
+      '<input type="password" id="adminPassword" class="admin-pass-input" placeholder="Parol" autocomplete="current-password" />' +
+      '<button class="btn btn-primary btn-block" id="adminLoginBtn" style="margin-top:12px">Kirish</button>' +
+      '<p class="auth-note" id="adminPassError" style="color:var(--danger);display:none">Parol noto\'g\'ri</p>' +
+    '</div>'
+  );
+  $('adminPassword').focus();
+  const tryLogin = () => doAdminLogin();
+  $('adminLoginBtn').addEventListener('click', tryLogin);
+  $('adminPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
+}
+
+async function doAdminLogin() {
+  const pass = $('adminPassword').value;
+  try {
+    await API.post('/api/admin/login', { password: pass });
+    closeModal();
+    showView('view-admin');
+    loadAdminData();
+  } catch (e) {
+    $('adminPassError').style.display = 'block';
+  }
+}
+
+async function adminLogout() {
+  try { await API.post('/api/admin/logout'); } catch (e) { /* ignore */ }
+  showView('view-app');
+  loadTests();
+}
+
+async function loadAdminData() {
+  loadAdminResults();
+  loadAdminTests();
+}
+
+/* ---- Natijalar ---- */
+async function loadAdminResults() {
+  try {
+    const results = await API.get('/api/admin/results');
+    let testsHtml = '<option value="">Barcha testlar</option>';
+    const seen = {};
+    for (const r of results) {
+      if (!seen[r.testId]) { seen[r.testId] = true; testsHtml += '<option value="' + r.testId + '">' + r.title + '</option>'; }
+    }
+    $('adminResults').innerHTML =
+      '<div class="panel">' +
+        '<div class="admin-bar" style="margin-bottom:12px">' +
+          '<h3>📊 Natijalar (' + results.length + ')</h3>' +
+          '<select id="resultFilter" class="admin-select">' + testsHtml + '</select>' +
+        '</div>' +
+        '<div class="table-wrap"><table id="resultsTable"><thead><tr><th>Foydalanuvchi</th><th>Test</th><th>Natija</th><th>Foiz</th><th>Sana</th></tr></thead><tbody id="resultsTbody">' + renderResultsRows(results) + '</tbody></table></div>' +
+      '</div>';
+    $('resultFilter').addEventListener('change', (e) => {
+      const v = e.target.value;
+      const rows = v ? results.filter((r) => r.testId === v) : results;
+      $('resultsTbody').innerHTML = renderResultsRows(rows);
+    });
+  } catch (e) {
+    $('adminResults').innerHTML = '<p class="admin-empty">Natijalar yuklanmadi: ' + e.message + '</p>';
+  }
+}
+
+function renderResultsRows(rows) {
+  if (!rows.length) return '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">Natijalar yo\'q</td></tr>';
+  return rows.map((r) => {
+    const cls = r.percent >= 75 ? 'good' : r.percent >= 60 ? 'ok' : 'bad';
+    return '<tr>' +
+      '<td><strong>' + r.name + '</strong>' + (r.username ? '<div class="rank-meta">@' + r.username + '</div>' : '') + '</td>' +
+      '<td>' + r.testTitle + '</td>' +
+      '<td>' + r.score + '/' + r.total + '</td>' +
+      '<td><span class="badge ' + cls + '">' + r.percent + '%</span></td>' +
+      '<td>' + new Date(r.date).toLocaleString('uz') + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+/* ---- Testlar boshqaruvi ---- */
+async function loadAdminTests() {
+  try {
+    adminTestsCache = await API.get('/api/admin/tests');
+    if (!adminTestsCache.length) {
+      $('adminTests').innerHTML = '<div class="panel"><h3>📝 Testlar</h3><p class="admin-empty">Testlar yo\'q</p></div>';
+      return;
+    }
+    const rows = adminTestsCache.map((t) =>
+      '<div class="test-row">' +
+        '<div class="t-icon">' + (t.icon || '📝') + '</div>' +
+        '<div class="t-info">' +
+          '<div class="t-title">' + t.title + (t.builtIn ? ' <span class="badge ok">standart</span>' : '') + '</div>' +
+          '<div class="t-meta">❓ ' + t.questionCount + ' savol' + (t.duration ? ' · ⏱ ' + t.duration + ' daq' : '') + '</div>' +
+        '</div>' +
+        '<button class="btn btn-outline btn-sm" data-edit="' + t.id + '">✏️ Tahrirlash</button>' +
+        (t.builtIn ? '' : '<button class="btn btn-danger btn-sm" data-del="' + t.id + '">🗑 O\'chirish</button>') +
+      '</div>'
+    ).join('');
+
+    $('adminTests').innerHTML =
+      '<div class="panel">' +
+        '<div class="admin-bar" style="margin-bottom:12px">' +
+          '<h3>📝 Testlar</h3>' +
+          '<button class="btn btn-primary btn-sm" id="newTestBtn">➕ Yangi test</button>' +
+        '</div>' + rows +
+      '</div>';
+
+    $('newTestBtn').addEventListener('click', () => openTestEditor(null));
+
+    document.querySelectorAll('[data-edit]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const t = adminTestsCache.find((x) => x.id === b.dataset.edit);
+        if (t) loadTestForEdit(t.id);
+      });
+    });
+    document.querySelectorAll('[data-del]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Bu testni o\'chirishni tasdiqlaysizmi?')) return;
+        try {
+          await API.delete('/api/admin/tests/' + b.dataset.del);
+          loadAdminTests();
+          toast('Test o\'chirildi');
+        } catch (e) { toast('Xato: ' + e.message); }
+      });
+    });
+  } catch (e) {
+    $('adminTests').innerHTML = '<p class="admin-empty">Xato: ' + e.message + '</p>';
+  }
+}
+
+async function loadTestForEdit(id) {
+  try {
+    const test = await API.get('/api/admin/tests/' + id + '/full');
+    openTestEditor(test);
+  } catch (e) {
+    toast('Xato: ' + e.message);
+  }
+}
+
+const LETTERS = ['A', 'B', 'C', 'D'];
+
+function emptyQuestions(n) {
+  return Array.from({ length: n }, () => ({ q: '', options: ['', '', '', ''], correct: 0, explanation: '' }));
+}
+
+function renderEditorQuestions(questions) {
+  return questions.map((q, i) => {
+    const correctBtns = LETTERS.map((L, ci) =>
+      '<button type="button" class="correct-btn' + (q.correct === ci ? ' active' : '') + '" data-idx="' + i + '" data-opt="' + ci + '">' + L + '</button>'
+    ).join('');
+    return '<div class="q-block" data-qidx="' + i + '">' +
+      '<div class="q-block-head"><span>Savol ' + (i + 1) + '</span><span class="q-expl">To\'g\'ri javobni tanlang</span></div>' +
+      '<textarea class="edit-q" placeholder="Savol matni..." rows="2">' + q.q + '</textarea>' +
+      '<div class="q-options">' + LETTERS.map((L, oi) =>
+        '<input class="edit-opt" data-opt="' + oi + '" placeholder="' + L + ') variant" value="' + (q.options[oi] || '').replace(/"/g, '&quot;') + '" />'
+      ).join('') + '</div>' +
+      '<div class="q-correct-row">To\'g\'ri: ' + correctBtns + '</div>' +
+      '<input class="edit-expl" placeholder="Izoh (ixtiyoriy)" value="' + (q.explanation || '').replace(/"/g, '&quot;') + '" />' +
+    '</div>';
+  }).join('');
+}
+
+function collectEditorQuestions() {
+  const blocks = document.querySelectorAll('#testModalBody .q-block');
+  return Array.from(blocks).map((b) => ({
+    q: b.querySelector('.edit-q').value.trim(),
+    options: Array.from(b.querySelectorAll('.edit-opt')).map((inp) => inp.value.trim()),
+    correct: Number(b.dataset.correct || 0),
+    explanation: b.querySelector('.edit-expl').value.trim(),
+  }));
+}
+
+function openTestEditor(test) {
+  const isEdit = !!test;
+  const questions = isEdit ? test.questions : emptyQuestions(20);
+  state.editingTestId = isEdit ? test.id : null;
+
+  openModal(
+    '<div class="modal-header"><h2>' + (isEdit ? '✏️ Testni tahrirlash' : '➕ Yangi test') + '</h2><button class="close-btn" id="closeTest">✕</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="editor-grid">' +
+        '<div class="form-field full"><label>Test nomi *</label><input id="editTitle" value="' + (test ? test.title.replace(/"/g, '&quot;') : '') + '" placeholder="Masalan: Sitologiya" /></div>' +
+        '<div class="form-field full"><label>Tavsif</label><textarea id="editDesc" rows="2" placeholder="Qisqacha tavsif...">' + (test ? test.description : '') + '</textarea></div>' +
+        '<div class="form-field"><label>Belgi (emoji)</label><input id="editIcon" value="' + (test ? test.icon : '📝') + '" /></div>' +
+        '<div class="form-field"><label>Daqiqa (ixtiyoriy)</label><input id="editDuration" type="number" min="0" value="' + (test && test.duration ? test.duration : '') + '" placeholder="20" /></div>' +
+      '</div>' +
+      '<h3 style="font-size:15px;margin:8px 0">Savollar (' + questions.length + ')</h3>' +
+      '<div id="editorQuestions">' + renderEditorQuestions(questions) + '</div>' +
+      '<div class="btn-row">' +
+        '<button class="btn btn-outline" id="addQuestionBtn">➕ Savol qo\'shish</button>' +
+        '<button class="btn btn-primary" id="saveTestBtn">💾 Saqlash</button>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function addQuestionToEditor() {
+  $('editorQuestions').insertAdjacentHTML('beforeend', renderEditorQuestions(emptyQuestions(1)));
+  $('editorQuestions').scrollIntoView({ block: 'end', behavior: 'smooth' });
+}
+
+async function saveTestFromEditor() {
+  const title = $('editTitle').value.trim();
+  if (!title) { toast('Test nomi kerak'); return; }
+  const questions = collectEditorQuestions();
+  if (!questions.length) { toast('Kamida bitta savol kerak'); return; }
+  const emptyIdx = questions.findIndex((q) => !q.q || q.options.some((o) => !o));
+  if (emptyIdx >= 0) { toast('Savol ' + (emptyIdx + 1) + ' to\'liq emas'); return; }
+
+  const payload = {
+    title,
+    description: $('editDesc').value.trim(),
+    icon: $('editIcon').value.trim() || '📝',
+    duration: $('editDuration').value ? Number($('editDuration').value) : null,
+    questions,
+  };
+
+  try {
+    if (state.editingTestId) {
+      await API.put('/api/admin/tests/' + state.editingTestId, payload);
+      toast('Test yangilandi');
+    } else {
+      await API.post('/api/admin/tests', payload);
+      toast('Test yaratildi');
+    }
+    closeModal();
+    loadAdminTests();
+  } catch (e) {
+    toast('Xato: ' + e.message);
+  }
+}
+
 /* ---------------- Init ---------------- */
 async function init() {
   initTheme();
@@ -460,8 +727,13 @@ async function init() {
   $('brand').addEventListener('click', () => { showView('view-app'); loadTests(); });
 
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
+  document.querySelectorAll('[data-atab]').forEach((t) => t.addEventListener('click', () => showAdminTab(t.dataset.atab)));
   $('joinChannelBtn').addEventListener('click', () => { window.open(state.config.channelUrl, '_blank'); });
   $('recheckBtn').addEventListener('click', refreshMembership);
+
+  $('adminBtn').addEventListener('click', openAdminPanel);
+  $('backToSiteBtn').addEventListener('click', () => { showView('view-app'); loadTests(); });
+  $('adminLogoutBtn').addEventListener('click', adminLogout);
 
   if (window.Telegram && window.Telegram.WebApp) {
     window.Telegram.WebApp.ready();
@@ -475,6 +747,16 @@ async function init() {
     if (e.target.id === 'analysisBtn') {
       $('analysisBlock').hidden = false;
       e.target.style.display = 'none';
+      return;
+    }
+    if (e.target.id === 'saveTestBtn') { saveTestFromEditor(); return; }
+    if (e.target.id === 'addQuestionBtn') { addQuestionToEditor(); return; }
+    const cb = e.target.closest('.correct-btn');
+    if (cb) {
+      const qidx = cb.dataset.idx;
+      document.querySelectorAll('#testModalBody .q-block[data-qidx="' + qidx + '"] .correct-btn').forEach((b) => b.classList.remove('active'));
+      cb.classList.add('active');
+      document.querySelector('#testModalBody .q-block[data-qidx="' + qidx + '"]').dataset.correct = cb.dataset.opt;
       return;
     }
     if (e.target === $('testModal')) closeModal();

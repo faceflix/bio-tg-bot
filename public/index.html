@@ -79,8 +79,32 @@
 
     </section>
 
+    <!-- ADMIN (O'QITUVCHI) VIEW -->
+    <section id="view-admin" class="view" hidden>
+      <div class="admin-bar">
+        <h2>👩‍🏫 O'qituvchi paneli</h2>
+        <div class="admin-bar-actions">
+          <button class="btn btn-outline btn-sm" id="backToSiteBtn">← Saytga qaytish</button>
+          <button class="btn btn-danger btn-sm" id="adminLogoutBtn">Chiqish</button>
+        </div>
+      </div>
+
+      <nav class="tabs">
+        <button class="tab active" data-atab="results">📊 Natijalar</button>
+        <button class="tab" data-atab="tests">📝 Testlar</button>
+      </nav>
+
+      <div id="atab-results" class="tab-panel active">
+        <div id="adminResults"></div>
+      </div>
+      <div id="atab-tests" class="tab-panel">
+        <div id="adminTests"></div>
+      </div>
+    </section>
+
     <footer class="app-footer">
       <span>BioTest © 2026</span>
+      <button class="admin-trigger" id="adminBtn" title="O'qituvchi paneli" aria-label="O'qituvchi paneli">⚙️</button>
     </footer>
   </main>
 
