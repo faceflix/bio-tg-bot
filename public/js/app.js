@@ -287,6 +287,7 @@ function renderTestQuestion() {
       '</div>' +
       '<div class="q-counter">Savol ' + (state.currentIndex + 1) + ' · Javob berildi: ' + answered + '/' + total + '</div>' +
       '<div class="q-text">' + q.q + '</div>' +
+      (q.image ? '<img class="test-q-img" src="' + q.image + '" alt="rasm" />' : '') +
       '<div class="options">' + opts + '</div>' +
       btnRow +
     '</div>'
@@ -672,7 +673,7 @@ async function loadTestForEdit(id) {
 const LETTERS = ['A', 'B', 'C', 'D'];
 
 function emptyQuestions(n) {
-  return Array.from({ length: n }, () => ({ q: '', options: ['', '', '', ''], correct: 0, explanation: '' }));
+  return Array.from({ length: n }, () => ({ q: '', options: ['', '', '', ''], correct: 0, explanation: '', image: '' }));
 }
 
 function renderEditorQuestions(questions) {
@@ -685,6 +686,15 @@ function renderEditorQuestions(questions) {
         '<span class="q-block-actions"><span class="q-expl">To\'g\'ri javobni tanlang</span>' +
         '<button type="button" class="q-del" title="Savolni o\'chirish">🗑</button></span></div>' +
       '<textarea class="edit-q" placeholder="Savol matni..." rows="2">' + q.q + '</textarea>' +
+      '<div class="q-img-wrap">' +
+        '<img class="q-img-preview"' + (q.image ? ' src="' + q.image + '" style="display:block"' : '') + ' alt="rasm" />' +
+        '<input type="hidden" class="edit-img" value="' + (q.image || '').replace(/"/g, '&quot;') + '" />' +
+        '<input type="file" class="q-img-file" accept="image/*" hidden />' +
+        '<div class="q-img-actions">' +
+          '<button type="button" class="q-img-add"' + (q.image ? ' style="display:none"' : '') + '>🖼 Rasm qo\'shish</button>' +
+          '<button type="button" class="q-img-del"' + (q.image ? '' : ' style="display:none"') + '>🗑 Rasmni olib tashlash</button>' +
+        '</div>' +
+      '</div>' +
       '<div class="q-options">' + LETTERS.map((L, oi) =>
         '<input class="edit-opt" data-opt="' + oi + '" placeholder="' + L + ') variant" value="' + (q.options[oi] || '').replace(/"/g, '&quot;') + '" />'
       ).join('') + '</div>' +
@@ -707,6 +717,7 @@ function collectEditorQuestions() {
     options: Array.from(b.querySelectorAll('.edit-opt')).map((inp) => inp.value.trim()),
     correct: Number(b.dataset.correct || 0),
     explanation: b.querySelector('.edit-expl').value.trim(),
+    image: b.querySelector('.edit-img').value,
   }));
 }
 
@@ -802,6 +813,21 @@ async function init() {
     }
     if (e.target.id === 'saveTestBtn') { saveTestFromEditor(); return; }
     if (e.target.id === 'addQuestionBtn') { addQuestionToEditor(); return; }
+    const imgAdd = e.target.closest('.q-img-add');
+    if (imgAdd) {
+      imgAdd.closest('.q-block').querySelector('.q-img-file').click();
+      return;
+    }
+    const imgDel = e.target.closest('.q-img-del');
+    if (imgDel) {
+      const block = imgDel.closest('.q-block');
+      block.querySelector('.edit-img').value = '';
+      block.querySelector('.q-img-preview').src = '';
+      block.querySelector('.q-img-preview').style.display = 'none';
+      block.querySelector('.q-img-add').style.display = '';
+      block.querySelector('.q-img-del').style.display = 'none';
+      return;
+    }
     const del = e.target.closest('.q-del');
     if (del) {
       const blocks = document.querySelectorAll('#testModalBody .q-block');
@@ -820,6 +846,27 @@ async function init() {
       return;
     }
     if (e.target === $('testModal')) closeModal();
+  });
+
+  $('testModal').addEventListener('change', (e) => {
+    if (!e.target.classList || !e.target.classList.contains('q-img-file')) return;
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 1.5 * 1024 * 1024) {
+      toast('Rasm 1.5 MB dan katta bo\'lmasin');
+      e.target.value = '';
+      return;
+    }
+    const block = e.target.closest('.q-block');
+    const reader = new FileReader();
+    reader.onload = () => {
+      block.querySelector('.edit-img').value = reader.result;
+      block.querySelector('.q-img-preview').src = reader.result;
+      block.querySelector('.q-img-preview').style.display = 'block';
+      block.querySelector('.q-img-add').style.display = 'none';
+      block.querySelector('.q-img-del').style.display = '';
+    };
+    reader.readAsDataURL(file);
   });
 
   document.addEventListener('keydown', (e) => {

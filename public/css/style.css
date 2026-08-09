@@ -203,6 +203,35 @@ body {
   margin-bottom: 8px;
 }
 .q-block textarea:focus, .q-block input:focus { outline: none; border-color: var(--primary); }
+.q-img-wrap { margin-bottom: 8px; }
+.q-img-preview {
+  display: none; max-width: 100%; max-height: 200px;
+  border-radius: 8px; border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.q-img-actions { display: flex; gap: 8px; }
+.q-img-add, .q-img-del {
+  flex: 1;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.q-img-add:hover { border-color: var(--primary); color: var(--primary); }
+.q-img-del:hover { border-color: var(--danger); color: var(--danger); }
+
+.test-q-img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  margin: 10px auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+}
 .q-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .q-correct-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; color: var(--text-muted); }
 .correct-btn {

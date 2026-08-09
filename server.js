@@ -31,7 +31,7 @@ async function getTestById(id) {
   return store.getTestById(id);
 }
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(
@@ -151,6 +151,7 @@ function validateTestPayload(body) {
         options: q.options.map((o) => String(o).trim()),
         correct: q.correct,
         explanation: String(q.explanation || '').trim(),
+        image: String(q.image || ''),
       })),
     },
   };
@@ -346,11 +347,13 @@ app.get('/api/tests/:id', requireAuth, async (req, res) => {
     id: test.id,
     title: test.title,
     description: test.description,
+    duration: test.duration || null,
     questions: test.questions.map((q) => ({
       q: q.q,
       options: q.options,
       correct: q.correct,
       explanation: q.explanation || '',
+      image: q.image || '',
     })),
   });
 });
