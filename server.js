@@ -445,9 +445,9 @@ app.post('/api/tests/:id/objection', requireAuth, async (req, res) => {
     const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Foydalanuvchi';
     const link = user.username ? '@' + String(user.username).replace(/^@/, '') : 'id ' + user.id;
     const text =
-      '<b>⚠️ E\'tiroz</b>\n' +
-      '<b>📚 ' + test.title + '</b>\n' +
-      '<b>❓ Savol ' + (qi + 1) + '</b>: ' + question + '\n' +
+      '⚠️ E\'TIROZ\n' +
+      '📚 ' + test.title + '\n' +
+      '❓ Savol ' + (qi + 1) + ': ' + question + '\n' +
       '📝 ' + msg + '\n' +
       '👤 ' + name + ' (' + link + ')';
     try {
