@@ -265,6 +265,14 @@ function renderTestQuestion() {
       '<span class="option-letter">' + letters[i] + '</span><span>' + opt + '</span></button>';
   });
 
+  let nav = '';
+  t.questions.forEach((_, i) => {
+    const cls = 'qn' +
+      (state.answers[i] !== null ? ' answered' : '') +
+      (i === state.currentIndex ? ' current' : '');
+    nav += '<button type="button" class="' + cls + '" data-nav="' + i + '">' + (i + 1) + '</button>';
+  });
+
   const allAnswered = answered === total;
   const btnRow =
     '<div class="btn-row">' +
@@ -285,6 +293,7 @@ function renderTestQuestion() {
         '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
         '<div class="progress-text">' + (state.currentIndex + 1) + ' / ' + total + '</div>' +
       '</div>' +
+      '<div class="q-nav">' + nav + '</div>' +
       '<div class="q-counter">Savol ' + (state.currentIndex + 1) + ' · Javob berildi: ' + answered + '/' + total + '</div>' +
       '<div class="q-text">' + q.q + '</div>' +
       (q.image ? '<img class="test-q-img" src="' + q.image + '" alt="rasm" />' : '') +
@@ -896,6 +905,12 @@ async function init() {
     }
     if (e.target.id === 'objectionSend') {
       sendObjection();
+      return;
+    }
+    const qnav = e.target.closest('.qn');
+    if (qnav) {
+      state.currentIndex = Number(qnav.dataset.nav);
+      openModal(renderTestQuestion());
       return;
     }
     const imgAdd = e.target.closest('.q-img-add');

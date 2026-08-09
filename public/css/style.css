@@ -511,6 +511,20 @@ tr:last-child td { border-bottom: none; }
 /* ---------- Test runner ---------- */
 .progress-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
 .progress-track { flex: 1; height: 8px; border-radius: 10px; background: var(--surface-2); overflow: hidden; }
+
+.q-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.qn {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.qn.answered { background: var(--success); border-color: var(--success); color: #fff; }
+.qn.current { outline: 2px solid var(--primary); outline-offset: 1px; }
 .progress-fill { height: 100%; border-radius: 10px; background: var(--primary); transition: width 0.3s ease; }
 .progress-text { font-size: 13px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
 
