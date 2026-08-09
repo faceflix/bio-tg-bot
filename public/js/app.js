@@ -222,6 +222,8 @@ async function loadTests() {
 async function startTest(testId) {
   try {
     clearDraft();
+    hideDraftBar();
+    resumeDraft = null;
     const test = await API.get('/api/tests/' + testId);
     state.currentTest = test;
     state.currentIndex = 0;
@@ -288,7 +290,10 @@ function renderTestQuestion() {
       (t.duration && state.testEndsAt
         ? '<div class="test-timer" id="testTimer">⏱ ' + fmtTime(Math.max(0, Math.floor((state.testEndsAt - Date.now()) / 1000))) + '</div>'
         : '') +
-      '<button class="close-btn" id="closeTest">✕</button></div>' +
+      '<span class="header-actions">' +
+        '<button class="close-btn" id="minimizeBtn" title="Kichraytirish (panelga saqlash)">—</button>' +
+        '<button class="close-btn" id="closeTest">✕</button>' +
+      '</span></div>' +
     '<div class="modal-body">' +
       '<div class="progress-row">' +
         '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
@@ -383,6 +388,9 @@ async function sendObjection() {
 const DRAFT_KEY = 'bioTestDraft';
 const DRAFT_GRACE = 5 * 60 * 1000;
 
+let resumeDraft = null;
+let draftBarTimer = null;
+
 function saveDraft() {
   if (!state.currentTest) return;
   try {
@@ -401,12 +409,143 @@ function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* ignore */ }
 }
 
+function getDraftFromStorage() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function stopDraftBarTimer() {
+  if (draftBarTimer) { clearInterval(draftBarTimer); draftBarTimer = null; }
+}
+
+function hideDraftBar() {
+  stopDraftBarTimer();
+  const b = $('draftBar');
+  if (b) b.hidden = true;
+}
+
+async function showDraftBar() {
+  stopDraftBarTimer();
+  const bar = $('draftBar');
+  if (!bar) return;
+  const draft = getDraftFromStorage();
+  if (!draft) { bar.hidden = true; return; }
+
+  const now = Date.now();
+  const five = draft.leftAt + DRAFT_GRACE;
+  const deadline = draft.endsAt ? Math.min(draft.endsAt, five) : five;
+
+  if (now >= deadline) {
+    clearDraft();
+    bar.hidden = true;
+    await draftFinalize();
+    return;
+  }
+
+  let test = (resumeDraft && resumeDraft.test && resumeDraft.test.id === draft.testId) ? resumeDraft.test : null;
+  if (!test) {
+    try { test = await API.get('/api/tests/' + draft.testId); } catch (e) { clearDraft(); bar.hidden = true; return; }
+    if (!Array.isArray(draft.answers) || draft.answers.length !== test.questions.length) { clearDraft(); bar.hidden = true; return; }
+  }
+  resumeDraft = { draft, test };
+
+  bar.innerHTML =
+    '<div class="draft-bar">' +
+      '<span class="draft-ico">⏸</span>' +
+      '<div class="draft-info">' +
+        '<div class="draft-title">Testning davomi bor: <strong>' + String(test.title).replace(/</g, '&lt;') + '</strong></div>' +
+        '<div class="draft-timer" id="draftTimer">⏱ ' + fmtTime(Math.max(0, Math.floor((deadline - Date.now()) / 1000))) + ' qoldi</div>' +
+      '</div>' +
+      '<button class="btn btn-primary btn-sm" id="draftResumeBtn">▶ Davom etish</button>' +
+      '<button class="btn btn-danger btn-sm" id="draftDiscardBtn">✖</button>' +
+    '</div>';
+  bar.hidden = false;
+
+  $('draftResumeBtn').addEventListener('click', resumeFromBar);
+  $('draftDiscardBtn').addEventListener('click', discardDraftBar);
+
+  draftBarTimer = setInterval(() => {
+    const remain = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+    const el = $('draftTimer');
+    if (el) el.textContent = '⏱ ' + fmtTime(remain) + ' qoldi';
+    if (remain <= 0) {
+      stopDraftBarTimer();
+      const b = $('draftBar');
+      if (b) b.hidden = true;
+      clearDraft();
+      draftFinalize();
+    }
+  }, 1000);
+}
+
+function resumeFromBar() {
+  hideDraftBar();
+  if (!resumeDraft) return;
+  const { draft, test } = resumeDraft;
+  state.currentTest = test;
+  state.answers = draft.answers;
+  state.currentIndex = draft.currentIndex || 0;
+  state.result = null;
+  state.testEndsAt = draft.endsAt;
+  openModal(renderTestQuestion());
+  startTimer();
+}
+
+function discardDraftBar() {
+  hideDraftBar();
+  clearDraft();
+  resumeDraft = null;
+  toast('Draft bekor qilindi');
+}
+
+function confirmDiscardDraft(onYes) {
+  const ov = document.createElement('div');
+  ov.className = 'confirm-overlay';
+  ov.innerHTML =
+    '<div class="confirm-box">' +
+      '<div class="confirm-title">⚠️ Testni yopish</div>' +
+      '<div class="confirm-text">Testni yopishni tasdiqlaysizmi? Javoblaringiz saqlanmaydi (draft o\'chadi).</div>' +
+      '<div class="btn-row">' +
+        '<button class="btn btn-outline" id="confirmNo">Bekor</button>' +
+        '<button class="btn btn-danger" id="confirmYes">Ha, yopish</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#confirmYes').addEventListener('click', () => { ov.remove(); onYes(); });
+  ov.querySelector('#confirmNo').addEventListener('click', () => ov.remove());
+  ov.addEventListener('click', (e) => { if (e.target === ov) ov.remove(); });
+}
+
+function reloadAppView() {
+  showView('view-app');
+  loadTests();
+}
+
+async function draftFinalize() {
+  clearDraft();
+  if (!resumeDraft) return;
+  const { draft, test } = resumeDraft;
+  state.currentTest = test;
+  state.answers = draft.answers;
+  state.currentIndex = draft.currentIndex || 0;
+  state.result = null;
+  state.testEndsAt = null;
+  reloadAppView();
+  toast('Vaqt tugashi sababli test avtomatik yakunlandi');
+  try {
+    const res = await API.post('/api/tests/' + test.id + '/submit', { answers: state.answers });
+    state.result = res;
+    openModal(renderResult());
+  } catch (e) {
+    toast('Natija saqlanmadi: ' + e.message);
+  }
+}
+
 async function resumeTest() {
-  let raw = null;
-  try { raw = localStorage.getItem(DRAFT_KEY); } catch (e) { return; }
-  if (!raw) return;
-  let draft = null;
-  try { draft = JSON.parse(raw); } catch (e) { clearDraft(); return; }
+  const draft = getDraftFromStorage();
+  if (!draft) return;
   if (draft.userId && state.user && draft.userId !== state.user.id) { clearDraft(); return; }
 
   const now = Date.now();
@@ -414,39 +553,15 @@ async function resumeTest() {
   const deadline = draft.endsAt ? Math.min(draft.endsAt, five) : five;
 
   let test;
-  try {
-    test = await API.get('/api/tests/' + draft.testId);
-  } catch (e) {
-    clearDraft();
-    return;
-  }
+  try { test = await API.get('/api/tests/' + draft.testId); } catch (e) { clearDraft(); return; }
   if (!Array.isArray(draft.answers) || draft.answers.length !== test.questions.length) { clearDraft(); return; }
 
-  state.currentTest = test;
-  state.answers = draft.answers;
-  state.currentIndex = draft.currentIndex || 0;
-  state.result = null;
-
+  resumeDraft = { draft, test };
   if (now >= deadline) {
-    clearDraft();
-    state.testEndsAt = null;
-    showView('view-app');
-    loadTests();
-    toast('Vaqt tugashi sababli test avtomatik yakunlandi');
-    try {
-      const res = await API.post('/api/tests/' + test.id + '/submit', { answers: state.answers });
-      state.result = res;
-      openModal(renderResult());
-    } catch (e) {
-      toast('Natija saqlanmadi: ' + e.message);
-    }
-    return;
+    await draftFinalize();
+  } else {
+    showDraftBar();
   }
-
-  state.testEndsAt = draft.endsAt;
-  openModal(renderTestQuestion());
-  startTimer();
-  toast('Testdan uzilgansiz — davom etyapsiz' + (state.testEndsAt ? ' ⏱ ' + fmtTime(Math.max(0, Math.floor((state.testEndsAt - now) / 1000))) : ''));
 }
 
 function gradeColor(percent) {
@@ -961,7 +1076,23 @@ async function init() {
   }
 
   $('testModal').addEventListener('click', (e) => {
-    if (e.target.id === 'closeTest') { clearDraft(); closeModal(); return; }
+    if (e.target.id === 'closeTest') {
+      const isActiveTest = !$('testModal').hidden && !!document.querySelector('#testModalBody .option');
+      if (isActiveTest) {
+        confirmDiscardDraft(() => { clearDraft(); closeModal(); });
+        return;
+      }
+      closeModal();
+      return;
+    }
+    if (e.target.id === 'minimizeBtn') {
+      saveDraft();
+      closeModal();
+      const d = getDraftFromStorage();
+      if (d) resumeDraft = { draft: d, test: state.currentTest };
+      showDraftBar();
+      return;
+    }
     if (e.target.id === 'restartBtn') { startTest(state.currentTest.id); return; }
     if (e.target.id === 'analysisBtn') {
       $('analysisBlock').hidden = false;
@@ -1048,7 +1179,17 @@ async function init() {
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !$('testModal').hidden) closeModal();
+    if (e.key !== 'Escape') return;
+    const ov = document.querySelector('.confirm-overlay');
+    if (ov) { ov.remove(); return; }
+    if (!$('testModal').hidden) {
+      const isActiveTest = !!document.querySelector('#testModalBody .option');
+      if (isActiveTest) {
+        confirmDiscardDraft(() => { clearDraft(); closeModal(); });
+      } else {
+        closeModal();
+      }
+    }
   });
 
   try {
