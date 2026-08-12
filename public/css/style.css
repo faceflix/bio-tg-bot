@@ -378,6 +378,17 @@ body {
 .home-hero-sub { font-size: 12px; opacity: 0.9; margin-top: 2px; }
 
 /* ---------- Draft panel (test davomi) ---------- */
+.user-id-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px dashed var(--primary);
+}
+.user-id-label { font-size: 12px; color: var(--text-muted); font-weight: 700; }
+.user-id-code { font-size: 16px; font-weight: 800; letter-spacing: 1px; color: var(--primary); font-family: 'Courier New', monospace; flex: 1; }
+
 .draft-bar {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 14px;

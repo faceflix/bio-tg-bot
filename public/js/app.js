@@ -186,11 +186,20 @@ window.onTelegramAuth = async function (user) {
 };
 
 function renderHeader() {
-  if (!state.user) { $('userChip').hidden = true; return; }
+  if (!state.user) { $('userChip').hidden = true; renderUserIdBar(); return; }
   const chip = $('userChip');
   chip.hidden = false;
   $('userName').textContent = state.user.firstName || state.user.username || 'User';
   $('userAvatar').src = state.user.photoUrl || fallbackAvatar(state.user.firstName);
+  renderUserIdBar();
+}
+
+function renderUserIdBar() {
+  const bar = $('userIdBar');
+  if (!bar) return;
+  if (!state.user || !state.user.code) { bar.hidden = true; return; }
+  $('userCode').textContent = state.user.code;
+  bar.hidden = false;
 }
 
 /* ---------------- Tests list ---------------- */
@@ -1068,6 +1077,17 @@ async function init() {
   $('adminBtn').addEventListener('click', openAdminPanel);
   $('backToSiteBtn').addEventListener('click', () => { showView('view-app'); loadTests(); });
   $('adminLogoutBtn').addEventListener('click', adminLogout);
+
+  $('copyIdBtn').addEventListener('click', () => {
+    const code = state.user && state.user.code;
+    if (!code) return;
+    const done = () => toast('ID nusxalandi: ' + code);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(done).catch(() => { window.prompt('ID-ingiz:', code); });
+    } else {
+      window.prompt('ID-ingiz:', code);
+    }
+  });
 
   if (window.Telegram && window.Telegram.WebApp) {
     window.Telegram.WebApp.ready();

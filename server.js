@@ -228,6 +228,7 @@ app.post('/api/auth', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         photoUrl: user.photoUrl,
+        code: user.code,
       };
       req.session.isMember = true;
       await new Promise((resolve) => req.session.save(resolve));
@@ -247,6 +248,7 @@ app.post('/api/auth', async (req, res) => {
       firstName: user.firstName,
       lastName: user.lastName,
       photoUrl: user.photoUrl,
+      code: user.code,
     };
     req.session.isMember = membership.isMember;
     await new Promise((resolve) => req.session.save(resolve));
@@ -264,9 +266,14 @@ app.post('/api/auth', async (req, res) => {
   }
 });
 
-app.get('/api/me', (req, res) => {
+app.get('/api/me', async (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Kirilmagan' });
-  res.json({ user: req.session.user, isMember: !!req.session.isMember });
+  try {
+    const code = await store.getUserCode(req.session.user.id);
+    res.json({ user: { ...req.session.user, code }, isMember: !!req.session.isMember });
+  } catch (e) {
+    res.status(500).json({ error: 'Server xatosi' });
+  }
 });
 
 // Telegram Web App (botdagi tugma orqali) - avtomatik kirish
@@ -295,6 +302,7 @@ app.post('/api/auth/webapp', async (req, res) => {
       firstName: stored.firstName,
       lastName: stored.lastName,
       photoUrl: stored.photoUrl,
+      code: stored.code,
     };
     req.session.isMember = membership.isMember;
     await new Promise((resolve) => req.session.save(resolve));
