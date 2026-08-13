@@ -16,6 +16,7 @@ const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
 const CHANNEL_URL = process.env.CHANNEL_URL || `https://t.me/${CHANNEL_USERNAME.replace('@', '')}`;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const FEEDBACK_CHAT_ID = process.env.FEEDBACK_CHAT_ID || '';
+const PAYMENT_CARD = process.env.PAYMENT_CARD || '';
 
 function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -128,7 +129,7 @@ app.get('/api/admin/tests', requireAdmin, async (req, res) => {
 });
 
 function validateTestPayload(body) {
-  const { title, description, icon, duration, questions } = body || {};
+  const { title, description, icon, duration, questions, price } = body || {};
   if (!title || !String(title).trim()) return { error: 'Test nomi kerak' };
   if (!Array.isArray(questions) || questions.length === 0) return { error: 'Kamida bitta savol kerak' };
   for (let i = 0; i < questions.length; i++) {
@@ -147,6 +148,7 @@ function validateTestPayload(body) {
       description: String(description || '').trim(),
       icon: String(icon || '📝').trim(),
       duration: Number(duration) || null,
+      price: price === '' || price === null || price === undefined ? null : Math.max(0, Math.round(Number(price))) || null,
       questions: questions.map((q) => ({
         q: String(q.q).trim(),
         options: q.options.map((o) => String(o).trim()),
@@ -168,6 +170,7 @@ app.get('/api/admin/tests/:id/full', requireAdmin, async (req, res) => {
     description: test.description,
     icon: test.icon,
     duration: test.duration,
+    price: test.price,
     builtIn: test.builtIn,
     questions: test.questions,
   });
@@ -202,6 +205,7 @@ app.get('/api/config', (req, res) => {
     channelUsername: CHANNEL_USERNAME,
     channelUrl: CHANNEL_URL,
     dev: DEV_AUTH,
+    paymentCard: PAYMENT_CARD,
   });
 });
 
@@ -333,16 +337,28 @@ app.post('/api/verify-membership', requireAuth, async (req, res) => {
 
 // Testlar ro'yxati (a'zo bo'lmasa ham ko'rinadi, lekin ishlatib bo'lmaydi)
 app.get('/api/tests', async (req, res) => {
-  const list = (await getTests()).map((t) => ({
+  const tests = await getTests();
+  let payments = {};
+  if (req.session.user) payments = await store.getPaymentsForUser(req.session.user.id);
+  const now = Date.now();
+  const list = tests.map((t) => ({
     id: t.id,
     title: t.title,
     description: t.description,
     icon: t.icon || '📝',
     questionCount: t.questions.length,
     duration: t.duration || null,
+    price: t.price || null,
+    unlocked: !t.price || isPaymentValid(payments[t.id], now),
   }));
   res.json(list);
 });
+
+function isPaymentValid(p, nowMs) {
+  if (!p) return false;
+  if (!p.expiresAt) return true;
+  return new Date(p.expiresAt).getTime() > nowMs;
+}
 
 // Test savollari - faqat a'zo uchun
 app.get('/api/tests/:id', requireAuth, async (req, res) => {
@@ -351,6 +367,13 @@ app.get('/api/tests/:id', requireAuth, async (req, res) => {
   }
   const test = await getTestById(req.params.id);
   if (!test) return res.status(404).json({ error: 'Test topilmadi' });
+
+  if (test.price) {
+    const payments = await store.getPaymentsForUser(req.session.user.id);
+    if (!isPaymentValid(payments[test.id], Date.now())) {
+      return res.status(403).json({ error: 'TO_LOV', title: test.title, price: test.price });
+    }
+  }
 
   res.json({
     id: test.id,
@@ -374,6 +397,13 @@ app.post('/api/tests/:id/submit', requireAuth, async (req, res) => {
   }
   const test = await getTestById(req.params.id);
   if (!test) return res.status(404).json({ error: 'Test topilmadi' });
+
+  if (test.price) {
+    const payments = await store.getPaymentsForUser(req.session.user.id);
+    if (!isPaymentValid(payments[test.id], Date.now())) {
+      return res.status(403).json({ error: 'TO_LOV' });
+    }
+  }
 
   const answers = req.body.answers;
   if (!Array.isArray(answers) || answers.length !== test.questions.length) {
@@ -476,6 +506,52 @@ app.get('/api/admin/objections', requireAdmin, async (req, res) => {
 // Admin: e'tirozni o'chirish
 app.delete('/api/admin/objections/:id', requireAdmin, async (req, res) => {
   await store.deleteObjection(req.params.id);
+  res.json({ ok: true });
+});
+
+// Admin: to'lovlar (pullik test ruxsatlari)
+app.get('/api/admin/payments', requireAdmin, async (req, res) => {
+  const [users, tests, payments] = await Promise.all([
+    store.getUsers(),
+    store.getTests(),
+    store.getPayments(),
+  ]);
+  const userList = Object.values(users).map((u) => ({
+    id: String(u.id),
+    name: u.firstName || u.username || String(u.id),
+    username: u.username || null,
+    code: u.code || '',
+  }));
+  const paidTests = tests
+    .filter((t) => t.price)
+    .map((t) => ({ id: t.id, title: t.title, price: t.price }));
+  res.json({ users: userList, paidTests, payments });
+});
+
+// Admin: to'lov/ruxsat berish
+app.post('/api/admin/payments', requireAdmin, async (req, res) => {
+  const { userId, testId, expiresAt } = req.body || {};
+  const uId = Number(userId);
+  const tId = String(testId || '');
+  if (!Number.isInteger(uId)) return res.status(400).json({ error: 'Foydalanuvchi noto\'g\'ri' });
+  const test = await getTestById(tId);
+  if (!test || !test.price) return res.status(400).json({ error: 'Test topilmadi yoki pullik emas' });
+
+  let exp = null;
+  if (expiresAt) {
+    const d = new Date(expiresAt);
+    if (isNaN(d.getTime())) return res.status(400).json({ error: 'Muddat noto\'g\'ri' });
+    exp = d.toISOString();
+  }
+
+  await store.setPayment({ userId: uId, testId: tId, price: test.price, expiresAt: exp });
+  res.json({ ok: true });
+});
+
+// Admin: to'lovni bekor qilish
+app.delete('/api/admin/payments', requireAdmin, async (req, res) => {
+  const { userId, testId } = req.body || {};
+  await store.removePayment(Number(userId), String(testId || ''));
   res.json({ ok: true });
 });
 

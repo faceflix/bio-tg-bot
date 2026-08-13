@@ -467,11 +467,26 @@ body {
   gap: 10px;
 }
 .test-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.test-card.locked { opacity: 0.8; border-style: dashed; }
+.test-card.locked .test-icon { filter: grayscale(1); }
+.test-card.locked:hover { transform: none; box-shadow: none; }
+.price-tag { background: rgba(244, 162, 97, 0.18) !important; color: var(--accent) !important; font-weight: 800 !important; }
 .test-icon { font-size: 40px; }
 .test-title { font-size: 18px; font-weight: 800; }
 .test-desc { font-size: 13px; color: var(--text-muted); line-height: 1.45; flex: 1; }
 .test-meta { display: flex; gap: 10px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
 .test-meta span { background: var(--surface-2); padding: 4px 10px; border-radius: 20px; }
+
+/* ---------- To'lov ---------- */
+.pay-box { display: flex; flex-direction: column; gap: 12px; }
+.pay-price { font-size: 16px; }
+.pay-card { font-size: 14px; background: var(--surface-2); padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--border); }
+.pay-note { font-size: 13px; line-height: 1.7; color: var(--text-muted); background: var(--surface-2); padding: 12px; border-radius: 10px; }
+.pay-grant { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.pay-grant .form-field label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 5px; }
+.pay-grant select, .pay-grant input { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 13px; font-family: inherit; margin-bottom: 8px; }
+.pay-grant select:focus, .pay-grant input:focus { outline: none; border-color: var(--primary); }
+.pay-grant-btn { display: flex; align-items: flex-end; padding-bottom: 8px; }
 
 /* ---------- Stats ---------- */
 .stat-cards {
@@ -663,4 +678,5 @@ tr:last-child td { border-bottom: none; }
   .auth-card { margin-top: 20px; padding: 28px 18px; }
   .q-text { font-size: 17px; }
   .header-inner { padding: 10px 14px; }
+  .pay-grant { grid-template-columns: 1fr; }
 }

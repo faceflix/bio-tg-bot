@@ -2,34 +2,36 @@
 'use strict';
 
 const API = {
-  get: async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error((await res.json()).error || 'Xatolik');
-    return res.json();
+  async _handle(res) {
+    if (res.ok) return res.json();
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* ignore */ }
+    const err = new Error((data && data.error) || 'Xatolik');
+    err.data = data;
+    throw err;
   },
-  post: async (url, body) => {
-    const res = await fetch(url, {
+  get: async (url) => API._handle(await fetch(url)),
+  post: async (url, body) => API._handle(
+    await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) throw new Error((await res.json()).error || 'Xatolik');
-    return res.json();
-  },
-  put: async (url, body) => {
-    const res = await fetch(url, {
+    })
+  ),
+  put: async (url, body) => API._handle(
+    await fetch(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error((await res.json()).error || 'Xatolik');
-    return res.json();
-  },
-  delete: async (url) => {
-    const res = await fetch(url, { method: 'DELETE' });
-    if (!res.ok) throw new Error((await res.json()).error || 'Xatolik');
-    return res.json();
-  },
+    })
+  ),
+  delete: async (url, body) => API._handle(
+    await fetch(url, {
+      method: 'DELETE',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  ),
 };
 
 const state = {
@@ -210,7 +212,7 @@ async function loadTests() {
     grid.innerHTML = '';
     for (const t of tests) {
       const card = document.createElement('div');
-      card.className = 'test-card';
+      card.className = 'test-card' + ((t.price && !t.unlocked) ? ' locked' : '');
       card.innerHTML =
         '<div class="test-icon">' + (t.icon || '📝') + '</div>' +
         '<div class="test-title">' + t.title + '</div>' +
@@ -218,8 +220,12 @@ async function loadTests() {
         '<div class="test-meta">' +
           '<span>❓ ' + t.questionCount + ' savol</span>' +
           (t.duration ? '<span>⏱ ' + t.duration + ' daqiqa</span>' : '') +
+          (t.price ? '<span class="price-tag">' + (t.unlocked ? '💳 ochiq' : '🔒 ' + t.price + ' so\'m') + '</span>' : '') +
         '</div>';
-      card.addEventListener('click', () => startTest(t.id));
+      card.addEventListener('click', () => {
+        if (t.price && !t.unlocked) openPaymentModal(t);
+        else startTest(t.id);
+      });
       grid.appendChild(card);
     }
   } catch (e) {
@@ -242,12 +248,59 @@ async function startTest(testId) {
     openModal(renderTestQuestion());
     startTimer();
   } catch (e) {
+    if (e.data && e.data.error === 'TO_LOV') {
+      openPaymentModal(e.data);
+      return;
+    }
     if (e.message.includes('a\'zo') || e.message.includes('kir')) {
       toast('Bu test uchun a\'zolik kerak. Qayta tekshirib ko\'ring.');
       await refreshMembership();
     } else {
       toast('Xato: ' + e.message);
     }
+  }
+}
+
+/* ---------------- Pullik test (to'lov modali) ---------------- */
+let payTestId = null;
+
+function openPaymentModal(t) {
+  payTestId = t.id;
+  const card = (state.config && state.config.paymentCard) || 'Ustozdan karta raqamini so\'rang';
+  const idCode = state.user ? state.user.code : '—';
+  openModal(
+    '<div class="modal-header"><h2>🔒 ' + t.title + '</h2><button class="close-btn" id="closeTest">✕</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="pay-box">' +
+        '<div class="pay-price">To\'lov: <strong>' + t.price + ' so\'m</strong></div>' +
+        '<div class="pay-card">Karta: <strong>' + card + '</strong></div>' +
+        '<div class="pay-note">' +
+          '<b>Qadamlar:</b><br>' +
+          '1) Ko\'rsatilgan kartaga pul o\'tkazing yoki naqd to\'lang<br>' +
+          '2) Ustozga <b style="font-size:15px">ID ( ' + idCode + ' )</b> va test nomini ayting<br>' +
+          '3) Ustoz tasdiqlagach, quyidagi tugmani bosing' +
+        '</div>' +
+        '<button class="btn btn-primary btn-block" id="payRecheckBtn">✅ To\'lov qildim — tekshirish</button>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+async function recheckPayment() {
+  if (!payTestId) { closeModal(); loadTests(); return; }
+  try {
+    const tests = await API.get('/api/tests');
+    const t = tests.find((x) => x.id === payTestId);
+    closeModal();
+    loadTests();
+    if (t && t.price && !t.unlocked) {
+      toast('Hali tasdiqlanmagan — ustozga ID-ingizni aytganingizni tekshiring');
+    } else {
+      toast('To\'lov tasdiqlandi! Test ochildi 🎉');
+    }
+  } catch (e) {
+    closeModal();
+    toast('Xato: ' + e.message);
   }
 }
 
@@ -805,6 +858,7 @@ async function loadAdminData() {
   loadAdminResults();
   loadAdminTests();
   loadAdminObjections();
+  loadAdminPayments();
 }
 
 /* ---- Natijalar ---- */
@@ -942,6 +996,96 @@ async function loadAdminObjections() {
   }
 }
 
+/* ---- To'lovlar / Ruxsatlar ---- */
+async function loadAdminPayments() {
+  try {
+    const data = await API.get('/api/admin/payments');
+    if (!data.paidTests.length) {
+      $('adminPayments').innerHTML = '<div class="panel"><h3>💳 To\'lovlar / Ruxsatlar</h3><p class="admin-empty">Hozircha pullik test yo\'q. Testni tahrirlab <b>narx</b> belgilang.</p></div>';
+      return;
+    }
+    const userOpts = data.users.map((u) =>
+      '<option value="' + u.id + '">' + u.name + ' (' + (u.code || '—') + ')' + (u.username ? ' @' + u.username : '') + '</option>'
+    ).join('');
+    const testOpts = data.paidTests.map((t) =>
+      '<option value="' + t.id + '">' + t.title + ' — ' + t.price + ' so\'m</option>'
+    ).join('');
+    const rows = data.payments.length
+      ? data.payments.map((p) => {
+          const exp = p.expiresAt ? '<span class="badge ok">' + new Date(p.expiresAt).toLocaleDateString('uz') + ' gacha</span>' : '<span class="badge ok">🕐 Umrbod</span>';
+          return '<tr>' +
+            '<td><strong>' + p.name + '</strong>' + (p.code ? '<div class="rank-meta">ID: ' + p.code + '</div>' : '') + '</td>' +
+            '<td>' + p.testTitle + '</td>' +
+            '<td>' + (p.price ? p.price + ' so\'m' : '—') + '</td>' +
+            '<td>' + exp + '</td>' +
+            '<td>' + new Date(p.createdAt).toLocaleString('uz') + '</td>' +
+            '<td><button class="btn btn-danger btn-sm" data-prevoke="' + p.userId + ':' + p.testId + '">🗑</button></td>' +
+          '</tr>';
+        }).join('')
+      : '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Hozircha ruxsat berilmagan</td></tr>';
+
+    $('adminPayments').innerHTML =
+      '<div class="panel">' +
+        '<h3 style="margin-bottom:14px">💳 To\'lovlar / Ruxsatlar</h3>' +
+        '<div class="pay-grant">' +
+          '<div class="form-field"><label>Talaba (izlash: nom / ID)</label>' +
+            '<input id="payUserSearch" placeholder="Qidirish..." />' +
+            '<select id="payUserSelect">' + userOpts + '</select></div>' +
+          '<div class="form-field"><label>Test</label>' +
+            '<select id="payTestSelect">' + testOpts + '</select></div>' +
+          '<div class="form-field"><label>Muddat</label>' +
+            '<select id="payExpireType">' +
+              '<option value="forever">🕐 Umrbod</option>' +
+              '<option value="date">📅 Muddatgacha</option>' +
+            '</select>' +
+            '<input type="date" id="payExpireDate" hidden /></div>' +
+          '<div class="pay-grant-btn"><button class="btn btn-primary btn-sm" id="payGrantBtn">Ruxsat berish</button></div>' +
+        '</div>' +
+        '<div class="table-wrap"><table><thead><tr><th>Foydalanuvchi</th><th>Test</th><th>Narx</th><th>Muddat</th><th>Sana</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '</div>';
+
+    const sel = $('payUserSelect');
+    $('payUserSearch').addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      Array.from(sel.options).forEach((o) => { o.hidden = o.text.toLowerCase().indexOf(q) === -1; });
+    });
+    $('payExpireType').addEventListener('change', (e) => { $('payExpireDate').hidden = e.target.value !== 'date'; });
+    $('payGrantBtn').addEventListener('click', grantPayment);
+
+    document.querySelectorAll('[data-prevoke]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const [userId, testId] = b.dataset.prevoke.split(':');
+        if (!confirm('Ruxsatni bekor qilasizmi?')) return;
+        try {
+          await API.delete('/api/admin/payments', { userId: Number(userId), testId });
+          loadAdminPayments();
+          toast('Ruxsat bekor qilindi');
+        } catch (err) { toast('Xato: ' + err.message); }
+      });
+    });
+  } catch (e) {
+    $('adminPayments').innerHTML = '<p class="admin-empty">Xato: ' + e.message + '</p>';
+  }
+}
+
+async function grantPayment() {
+  const userId = $('payUserSelect').value;
+  const testId = $('payTestSelect').value;
+  const expireType = $('payExpireType').value;
+  let expiresAt = null;
+  if (expireType === 'date') {
+    expiresAt = $('payExpireDate').value;
+    if (!expiresAt) { toast('Muddat sanasini kiriting'); return; }
+  }
+  try {
+    await API.post('/api/admin/payments', { userId: Number(userId), testId, expiresAt });
+    toast('Ruxsat berildi ✅');
+    loadAdminPayments();
+  } catch (e) {
+    toast('Xato: ' + e.message);
+  }
+}
+
 async function loadTestForEdit(id) {
   try {
     const test = await API.get('/api/admin/tests/' + id + '/full');
@@ -1015,6 +1159,7 @@ function openTestEditor(test) {
         '<div class="form-field full"><label>Tavsif</label><textarea id="editDesc" rows="2" placeholder="Qisqacha tavsif...">' + (test ? test.description : '') + '</textarea></div>' +
         '<div class="form-field"><label>Belgi (emoji)</label><input id="editIcon" value="' + (test ? test.icon : '📝') + '" /></div>' +
         '<div class="form-field"><label>Daqiqa (ixtiyoriy)</label><input id="editDuration" type="number" min="0" value="' + (test && test.duration ? test.duration : '') + '" placeholder="20" /></div>' +
+        '<div class="form-field"><label>Narx, so\'m (bo\'sh = bepul)</label><input id="editPrice" type="number" min="0" value="' + (test && test.price ? test.price : '') + '" placeholder="5000" /></div>' +
       '</div>' +
       '<h3 style="font-size:15px;margin:8px 0" id="editorQuestionsHead">Savollar (' + questions.length + ')</h3>' +
       '<div id="editorQuestions">' + renderEditorQuestions(questions) + '</div>' +
@@ -1045,6 +1190,7 @@ async function saveTestFromEditor() {
     description: $('editDesc').value.trim(),
     icon: $('editIcon').value.trim() || '📝',
     duration: $('editDuration').value ? Number($('editDuration').value) : null,
+    price: $('editPrice').value !== '' ? Number($('editPrice').value) : null,
     questions,
   };
 
@@ -1133,6 +1279,10 @@ async function init() {
     }
     if (e.target.id === 'objectionSend') {
       sendObjection();
+      return;
+    }
+    if (e.target.id === 'payRecheckBtn') {
+      recheckPayment();
       return;
     }
     const qnav = e.target.closest('.qn');

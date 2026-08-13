@@ -25,5 +25,7 @@ services:
         sync: false
       - key: FEEDBACK_CHAT_ID
         sync: false
+      - key: PAYMENT_CARD
+        sync: false
       - key: DEV_AUTH
         value: "0"
