@@ -511,29 +511,24 @@ app.delete('/api/admin/objections/:id', requireAdmin, async (req, res) => {
 
 // Admin: to'lovlar (pullik test ruxsatlari)
 app.get('/api/admin/payments', requireAdmin, async (req, res) => {
-  const [users, tests, payments] = await Promise.all([
-    store.getUsers(),
+  const [tests, payments] = await Promise.all([
     store.getTests(),
     store.getPayments(),
   ]);
-  const userList = Object.values(users).map((u) => ({
-    id: String(u.id),
-    name: u.firstName || u.username || String(u.id),
-    username: u.username || null,
-    code: u.code || '',
-  }));
   const paidTests = tests
     .filter((t) => t.price)
     .map((t) => ({ id: t.id, title: t.title, price: t.price }));
-  res.json({ users: userList, paidTests, payments });
+  res.json({ paidTests, payments });
 });
 
-// Admin: to'lov/ruxsat berish
+// Admin: to'lov/ruxsat berish (ID kodi bo'yicha)
 app.post('/api/admin/payments', requireAdmin, async (req, res) => {
-  const { userId, testId, expiresAt } = req.body || {};
-  const uId = Number(userId);
+  const { code, testId, expiresAt } = req.body || {};
+  const tCode = String(code || '').trim().toUpperCase();
+  if (!tCode) return res.status(400).json({ error: 'Talaba ID kodini kiriting' });
+  const user = await store.getUserByCode(tCode);
+  if (!user) return res.status(400).json({ error: 'Bu ID ga ega talaba topilmadi' });
   const tId = String(testId || '');
-  if (!Number.isInteger(uId)) return res.status(400).json({ error: 'Foydalanuvchi noto\'g\'ri' });
   const test = await getTestById(tId);
   if (!test || !test.price) return res.status(400).json({ error: 'Test topilmadi yoki pullik emas' });
 
@@ -544,8 +539,8 @@ app.post('/api/admin/payments', requireAdmin, async (req, res) => {
     exp = d.toISOString();
   }
 
-  await store.setPayment({ userId: uId, testId: tId, price: test.price, expiresAt: exp });
-  res.json({ ok: true });
+  await store.setPayment({ userId: user.id, testId: tId, price: test.price, expiresAt: exp });
+  res.json({ ok: true, name: user.firstName || user.username || user.code });
 });
 
 // Admin: to'lovni bekor qilish

@@ -97,6 +97,7 @@ body {
   margin: 0 auto;
   padding: 24px 20px 40px;
 }
+#view-app { padding-bottom: 84px; }
 .view { animation: fadeIn 0.25s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -124,6 +125,14 @@ body {
   transition: all 0.15s;
 }
 .admin-trigger:hover { color: var(--text); border-color: var(--primary); transform: translateY(-50%) scale(1.08); }
+
+.admin-header-btn {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-size: 17px;
+  box-shadow: 0 2px 8px rgba(42, 157, 143, 0.18);
+}
+.admin-header-btn:hover { background: var(--primary); color: #fff; transform: scale(1.06); }
 
 /* ---------- Admin panel ---------- */
 .admin-bar {
@@ -449,6 +458,27 @@ body {
 .tab-panel { display: none; animation: fadeIn 0.2s ease; }
 .tab-panel.active { display: block; }
 
+/* Pastki fiksatsiyalangan navbar (home tablar) */
+.home-tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  margin-bottom: 0;
+  padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
+  border-radius: 14px 14px 0 0;
+  border-bottom: none;
+  flex-wrap: nowrap;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+}
+.home-tabs .tab {
+  min-width: 0;
+  padding: 10px 4px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 /* ---------- Test cards ---------- */
 .tests-grid {
   display: grid;
@@ -487,6 +517,7 @@ body {
 .pay-grant select, .pay-grant input { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 13px; font-family: inherit; margin-bottom: 8px; }
 .pay-grant select:focus, .pay-grant input:focus { outline: none; border-color: var(--primary); }
 .pay-grant-btn { display: flex; align-items: flex-end; padding-bottom: 8px; }
+.form-hint { font-size: 11px; color: var(--text-muted); margin-top: -4px; }
 
 /* ---------- Stats ---------- */
 .stat-cards {
@@ -664,7 +695,7 @@ tr:last-child td { border-bottom: none; }
 
 /* ---------- Toast ---------- */
 .toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: calc(72px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
   background: var(--text); color: var(--bg);
   padding: 12px 22px;
   border-radius: 12px;

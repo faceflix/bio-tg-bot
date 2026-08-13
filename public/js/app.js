@@ -1004,9 +1004,6 @@ async function loadAdminPayments() {
       $('adminPayments').innerHTML = '<div class="panel"><h3>💳 To\'lovlar / Ruxsatlar</h3><p class="admin-empty">Hozircha pullik test yo\'q. Testni tahrirlab <b>narx</b> belgilang.</p></div>';
       return;
     }
-    const userOpts = data.users.map((u) =>
-      '<option value="' + u.id + '">' + u.name + ' (' + (u.code || '—') + ')' + (u.username ? ' @' + u.username : '') + '</option>'
-    ).join('');
     const testOpts = data.paidTests.map((t) =>
       '<option value="' + t.id + '">' + t.title + ' — ' + t.price + ' so\'m</option>'
     ).join('');
@@ -1028,9 +1025,9 @@ async function loadAdminPayments() {
       '<div class="panel">' +
         '<h3 style="margin-bottom:14px">💳 To\'lovlar / Ruxsatlar</h3>' +
         '<div class="pay-grant">' +
-          '<div class="form-field"><label>Talaba (izlash: nom / ID)</label>' +
-            '<input id="payUserSearch" placeholder="Qidirish..." />' +
-            '<select id="payUserSelect">' + userOpts + '</select></div>' +
+          '<div class="form-field"><label>Talaba ID kodi</label>' +
+            '<input id="payUserCode" placeholder="Masalan: P76R86" autocomplete="off" />' +
+            '<div class="form-hint">Talaba o\'z ID kodini aytadi (uy sahifada ko\'rinadi)</div></div>' +
           '<div class="form-field"><label>Test</label>' +
             '<select id="payTestSelect">' + testOpts + '</select></div>' +
           '<div class="form-field"><label>Muddat</label>' +
@@ -1044,11 +1041,7 @@ async function loadAdminPayments() {
         '<div class="table-wrap"><table><thead><tr><th>Foydalanuvchi</th><th>Test</th><th>Narx</th><th>Muddat</th><th>Sana</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '</div>';
 
-    const sel = $('payUserSelect');
-    $('payUserSearch').addEventListener('input', (e) => {
-      const q = e.target.value.toLowerCase();
-      Array.from(sel.options).forEach((o) => { o.hidden = o.text.toLowerCase().indexOf(q) === -1; });
-    });
+    const sel = $('payExpireType');
     $('payExpireType').addEventListener('change', (e) => { $('payExpireDate').hidden = e.target.value !== 'date'; });
     $('payGrantBtn').addEventListener('click', grantPayment);
 
@@ -1069,16 +1062,17 @@ async function loadAdminPayments() {
 }
 
 async function grantPayment() {
-  const userId = $('payUserSelect').value;
+  const code = $('payUserCode').value.trim();
   const testId = $('payTestSelect').value;
   const expireType = $('payExpireType').value;
+  if (!code) { toast('Talaba ID kodini kiriting'); return; }
   let expiresAt = null;
   if (expireType === 'date') {
     expiresAt = $('payExpireDate').value;
     if (!expiresAt) { toast('Muddat sanasini kiriting'); return; }
   }
   try {
-    await API.post('/api/admin/payments', { userId: Number(userId), testId, expiresAt });
+    await API.post('/api/admin/payments', { code, testId, expiresAt });
     toast('Ruxsat berildi ✅');
     loadAdminPayments();
   } catch (e) {
